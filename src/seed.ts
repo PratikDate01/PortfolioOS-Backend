@@ -11,7 +11,23 @@ import { BlogPostModel } from './models/blogPost.model';
 import { CommentModel } from './models/comment.model';
 import { CertificationModel } from './models/certification.model';
 import { TestimonialModel } from './models/testimonial.model';
+import { PortfolioModel } from './models/portfolio.model';
+import { SubscriptionModel, createDefaultSubscription } from './models/subscription.model';
 import { connectDB } from './config/db';
+
+/**
+ * Generate a URL-safe username from a display name.
+ */
+function generateUsername(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .substring(0, 30);
+}
 
 const seed = async () => {
   try {
@@ -27,21 +43,26 @@ const seed = async () => {
     await CommentModel.deleteMany({});
     await CertificationModel.deleteMany({});
     await TestimonialModel.deleteMany({});
+    await PortfolioModel.deleteMany({});
+    await SubscriptionModel.deleteMany({});
 
-    console.log('Seeding default owner and users...');
+    console.log('Seeding default superadmin and users...');
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash('password123', salt);
     
     const owner = new UserModel({
+      username: 'pratik-date',
       name: 'Pratik Satish Date',
       email: 'pratikdate.sknsits.it@gmail.com',
       passwordHash,
-      role: 'owner',
+      role: 'superadmin',
       authProvider: 'local',
       isVerified: true,
+      subscriptionTier: 'premium',
       xp: 1500,
       level: 5,
       bio: 'IT Engineering student with hands-on experience in full-stack development, AI/ML, and cloud technologies.',
+      githubUsername: 'PratikDate01',
       socialLinks: {
         github: 'https://github.com/PratikDate01',
         linkedin: 'https://www.linkedin.com/in/pratik-date-91999a32a/',
@@ -49,24 +70,72 @@ const seed = async () => {
       },
     });
     await owner.save();
-    console.log('Owner seeded: pratikdate.sknsits.it@gmail.com / password123');
+    console.log('Superadmin seeded: pratikdate.sknsits.it@gmail.com / password123');
 
-    const guestUser = new UserModel({
+    // Create portfolio for owner
+    const ownerPortfolio = new PortfolioModel({
+      ownerId: owner._id,
+      username: owner.username,
+      slug: owner.username,
+      headline: 'Full Stack Developer & AI/ML Enthusiast',
+      bio: owner.bio,
+      githubUsername: 'PratikDate01',
+      socialLinks: owner.socialLinks,
+      theme: 'portfolio-os',
+      visibility: 'public',
+      seoSettings: {
+        title: 'Pratik Date — Full Stack Developer Portfolio',
+        description: 'Portfolio of Pratik Date — Full Stack Developer specializing in React, Node.js, and AI/ML.',
+      },
+      analyticsSettings: { enabled: true },
+    });
+    await ownerPortfolio.save();
+    console.log('Owner portfolio created.');
+
+    // Create subscription for owner
+    const ownerSubscription = createDefaultSubscription(owner._id);
+    ownerSubscription.tier = 'premium';
+    await ownerSubscription.save();
+    console.log('Owner subscription created (premium tier).');
+
+    const regularUser = new UserModel({
+      username: 'jane-doe',
       name: 'Jane Doe',
       email: 'jane@example.com',
       passwordHash,
-      role: 'member',
+      role: 'user',
       authProvider: 'local',
       isVerified: true,
+      subscriptionTier: 'free',
       xp: 120,
       level: 1,
       bio: 'Developer and tech enthusiast.',
     });
-    await guestUser.save();
-    console.log('Guest user seeded: jane@example.com / password123');
+    await regularUser.save();
+    console.log('Regular user seeded: jane@example.com / password123');
 
-    console.log('Seeding projects...');
+    // Create portfolio for regular user
+    const janePortfolio = new PortfolioModel({
+      ownerId: regularUser._id,
+      username: regularUser.username,
+      slug: regularUser.username,
+      headline: 'Developer & Tech Enthusiast',
+      bio: regularUser.bio,
+      theme: 'minimal',
+      visibility: 'public',
+      analyticsSettings: { enabled: true },
+    });
+    await janePortfolio.save();
+    console.log('Jane portfolio created.');
+
+    // Create subscription for regular user
+    const janeSubscription = createDefaultSubscription(regularUser._id);
+    await janeSubscription.save();
+    console.log('Jane subscription created (free tier).');
+
+    console.log('Seeding projects (owned by superadmin)...');
     const p1 = await ProjectModel.create({
+      ownerId: owner._id,
       slug: 'speakwrite',
       title: 'SpeakWrite',
       summary: 'A full-stack web application designed for text-to-speech conversion with custom options.',
@@ -86,6 +155,7 @@ const seed = async () => {
     });
 
     const p2 = await ProjectModel.create({
+      ownerId: owner._id,
       slug: 'mind-map-generator',
       title: 'Mind Map Generator',
       summary: 'An interactive visual tool that allows users to dynamically generate, edit, and visualize mind maps.',
@@ -105,6 +175,7 @@ const seed = async () => {
     });
 
     const p3 = await ProjectModel.create({
+      ownerId: owner._id,
       slug: 'ai-code-reviewer',
       title: 'AI Code Reviewer System',
       summary: 'An AI-powered system designed to analyze and review code quality with intelligent suggestions.',
@@ -123,8 +194,9 @@ const seed = async () => {
     });
     console.log('Projects seeded!');
 
-    console.log('Seeding experiences...');
+    console.log('Seeding experiences (owned by superadmin)...');
     await ExperienceModel.create({
+      ownerId: owner._id,
       organization: 'Labmentix',
       role: 'Web Development Intern',
       type: 'internship',
@@ -141,6 +213,7 @@ const seed = async () => {
     });
 
     await ExperienceModel.create({
+      ownerId: owner._id,
       organization: 'AICTE Edunet Foundation',
       role: 'AI & Machine Learning Intern',
       type: 'internship',
@@ -156,7 +229,7 @@ const seed = async () => {
     });
     console.log('Experiences seeded!');
 
-    console.log('Seeding skills...');
+    console.log('Seeding skills (owned by superadmin)...');
     const skillsList = [
       { name: 'Java', category: 'backend', proficiency: 85, yearsExperience: 2 },
       { name: 'JavaScript', category: 'frontend', proficiency: 90, yearsExperience: 3 },
@@ -172,12 +245,13 @@ const seed = async () => {
     ];
 
     for (const s of skillsList) {
-      await SkillModel.create(s);
+      await SkillModel.create({ ...s, ownerId: owner._id });
     }
     console.log('Skills seeded!');
 
     console.log('Seeding blog posts and comments...');
     const blog1 = await BlogPostModel.create({
+      ownerId: owner._id,
       slug: 'mastering-monorepos-with-npm-workspaces',
       title: 'Mastering Monorepos with NPM Workspaces',
       excerpt: 'Learn how to structure and coordinate a full-stack typescript project using workspaces and shared type definition trees.',
@@ -213,6 +287,7 @@ Using this structure ensures consistent dependencies across all environments.`,
     });
 
     const blog2 = await BlogPostModel.create({
+      ownerId: owner._id,
       slug: 'rise-of-agentic-ai-coding-assistants',
       title: 'The Rise of Agentic AI Coding Assistants',
       excerpt: 'Exploring autonomous developer paradigms, agent workflows, and the future of pair programming.',
@@ -234,10 +309,11 @@ This paradigm allows developers to focus on higher-level architecture and system
       readingTimeMinutes: 4,
       viewCount: 250,
       likeCount: 89,
-      publishedAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // yesterday
+      publishedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
     });
 
     const blog3 = await BlogPostModel.create({
+      ownerId: owner._id,
       slug: 'sleek-dark-mode-aesthetics',
       title: 'Sleek Dark Mode Aesthetics in Modern CSS',
       excerpt: 'A deep dive into styling high-contrast dark workspaces with glassmorphic cards and glowing accents.',
@@ -268,7 +344,7 @@ Use dark semi-transparent backdrops coupled with backdrop filters to create dept
     // Add comments
     const comment1 = await CommentModel.create({
       postId: blog1._id,
-      authorId: guestUser._id,
+      authorId: regularUser._id,
       body: 'This monorepo breakdown is super helpful! How do you handle environment-specific configurations in workspaces?',
       status: 'visible'
     });
@@ -283,8 +359,9 @@ Use dark semi-transparent backdrops coupled with backdrop filters to create dept
 
     console.log('Blog posts and comments seeded!');
 
-    console.log('Seeding certifications...');
+    console.log('Seeding certifications (owned by superadmin)...');
     await CertificationModel.create({
+      ownerId: owner._id,
       title: 'AWS Certified Solutions Architect Job Simulation',
       issuer: 'Amazon Web Services (AWS) / Forage',
       issueDate: new Date('2025-01-15'),
@@ -295,6 +372,7 @@ Use dark semi-transparent backdrops coupled with backdrop filters to create dept
     });
 
     await CertificationModel.create({
+      ownerId: owner._id,
       title: 'Accenture Software Engineering Job Simulation',
       issuer: 'Accenture / Forage',
       issueDate: new Date('2025-02-10'),
@@ -305,6 +383,7 @@ Use dark semi-transparent backdrops coupled with backdrop filters to create dept
     });
 
     await CertificationModel.create({
+      ownerId: owner._id,
       title: 'TATA GenAI Powered Data Analytics Job Simulation',
       issuer: 'TATA Group / Forage',
       issueDate: new Date('2025-03-20'),
@@ -315,6 +394,7 @@ Use dark semi-transparent backdrops coupled with backdrop filters to create dept
     });
 
     await CertificationModel.create({
+      ownerId: owner._id,
       title: 'Microsoft C# Certification',
       issuer: 'Microsoft',
       issueDate: new Date('2024-10-05'),
@@ -325,6 +405,7 @@ Use dark semi-transparent backdrops coupled with backdrop filters to create dept
     });
 
     await CertificationModel.create({
+      ownerId: owner._id,
       title: 'IBM Web Development & Programming Certifications',
       issuer: 'IBM',
       issueDate: new Date('2024-08-12'),
@@ -335,8 +416,9 @@ Use dark semi-transparent backdrops coupled with backdrop filters to create dept
     });
     console.log('Certifications seeded!');
 
-    console.log('Seeding testimonials...');
+    console.log('Seeding testimonials (for superadmin portfolio)...');
     await TestimonialModel.create({
+      portfolioOwnerId: owner._id,
       authorName: 'Sarah Jenkins',
       authorRole: 'VP of Product',
       authorCompany: 'OrbitTech Corp',
@@ -348,6 +430,7 @@ Use dark semi-transparent backdrops coupled with backdrop filters to create dept
     });
 
     await TestimonialModel.create({
+      portfolioOwnerId: owner._id,
       authorName: 'David Chen',
       authorRole: 'CTO',
       authorCompany: 'SaaSify Inc',
@@ -359,6 +442,7 @@ Use dark semi-transparent backdrops coupled with backdrop filters to create dept
     });
 
     await TestimonialModel.create({
+      portfolioOwnerId: owner._id,
       authorName: 'Alex Mercer',
       authorRole: 'Founder',
       authorCompany: 'NextGen AI',

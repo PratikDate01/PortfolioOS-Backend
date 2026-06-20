@@ -1,92 +1,114 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { SaaSRole } from '@portfolio-os/types';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-portfolio-os-secret-key-12345';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
-    role: 'owner' | 'admin' | 'member' | 'guest';
+    role: SaaSRole;
     email: string;
+    username: string;
   };
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-portfolio-os-secret-key-12345';
-
-export const protect = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+/**
+ * Protect middleware — verifies JWT and attaches user payload to request.
+ */
+export const protect = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
   try {
-    let token = '';
+    const authHeader = req.headers.authorization;
 
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith('Bearer')
-    ) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
-    if (!token) {
-      res.status(401).json({ error: 'Not authorized, token required' });
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Not authorized, no token provided' });
       return;
     }
 
+    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET) as {
       id: string;
-      role: 'owner' | 'admin' | 'member' | 'guest';
+      role: SaaSRole;
       email: string;
+      username?: string;
     };
 
-    req.user = decoded;
+    req.user = {
+      id: decoded.id,
+      role: decoded.role,
+      email: decoded.email,
+      username: decoded.username || '',
+    };
+
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Not authorized, invalid token' });
+    res.status(401).json({ error: 'Not authorized, token invalid or expired' });
   }
 };
 
-export const restrictTo = (...roles: ('owner' | 'admin' | 'member' | 'guest')[]) => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
-    if (!req.user) {
-      res.status(401).json({ error: 'Not authorized, user credentials missing' });
+/**
+ * Optional protect — same as protect but doesn't fail if no token is provided.
+ * Useful for public endpoints that return extra data for authenticated users.
+ */
+export const optionalProtect = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      next();
       return;
     }
 
-    if (!roles.includes(req.user.role)) {
-      res.status(403).json({ error: `Forbidden, required role not met` });
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET) as {
+      id: string;
+      role: SaaSRole;
+      email: string;
+      username?: string;
+    };
+
+    req.user = {
+      id: decoded.id,
+      role: decoded.role,
+      email: decoded.email,
+      username: decoded.username || '',
+    };
+
+    next();
+  } catch {
+    // Token invalid — proceed without user context
+    next();
+  }
+};
+
+/**
+ * Role-based access control middleware.
+ * Restricts access to users with one of the specified roles.
+ */
+export const restrictTo = (...roles: (SaaSRole | 'owner' | 'member')[]) => {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const userRole = req.user.role;
+    const mappedUserRoles: string[] = [userRole];
+
+    if (userRole === 'superadmin') {
+      mappedUserRoles.push('owner');
+    }
+    if (userRole === 'user') {
+      mappedUserRoles.push('owner', 'member');
+    }
+
+    const hasPermission = roles.some((role) => mappedUserRoles.includes(role));
+
+    if (!hasPermission) {
+      res.status(403).json({ error: 'You do not have permission to perform this action' });
       return;
     }
 
     next();
   };
-};
-
-export const optionalProtect = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    let token = '';
-
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith('Bearer')
-    ) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
-    if (token) {
-      const decoded = jwt.verify(token, JWT_SECRET) as {
-        id: string;
-        role: 'owner' | 'admin' | 'member' | 'guest';
-        email: string;
-      };
-      req.user = decoded;
-    }
-
-    next();
-  } catch (error) {
-    // Fail silently for optional auth, just continue as unauthenticated
-    next();
-  }
 };

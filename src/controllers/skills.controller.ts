@@ -1,10 +1,33 @@
 import { Request, Response } from 'express';
 import { SkillModel } from '../models/skill.model';
+import { UserModel } from '../models/user.model';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
-export const getSkills = async (req: Request, res: Response): Promise<void> => {
+export const getSkills = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { category } = req.query;
+    const { category, username } = req.query;
     const filter: Record<string, any> = {};
+
+    // Enforce tenant boundary
+    if (username) {
+      const user = await UserModel.findOne({ username: String(username).toLowerCase().trim() });
+      if (!user) {
+        res.status(200).json({ data: [] });
+        return;
+      }
+      filter.ownerId = user._id;
+    } else if (req.user?.id) {
+      filter.ownerId = req.user.id;
+    } else {
+      // Public fallback: retrieve primary superadmin's skills
+      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
+      if (primaryOwner) {
+        filter.ownerId = primaryOwner._id;
+      } else {
+        res.status(200).json({ data: [] });
+        return;
+      }
+    }
 
     if (category) {
       filter.category = category;
@@ -17,9 +40,26 @@ export const getSkills = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-export const createSkill = async (req: Request, res: Response): Promise<void> => {
+export const createSkill = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const skill = new SkillModel(req.body);
+    const skillData = req.body;
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    skillData.ownerId = ownerId;
+
+    // Verify uniqueness of skill name per owner
+    const existing = await SkillModel.findOne({ ownerId, name: { $regex: new RegExp(`^${skillData.name}$`, 'i') } });
+    if (existing) {
+      res.status(400).json({ error: 'A skill with this name already exists in your portfolio' });
+      return;
+    }
+
+    const skill = new SkillModel(skillData);
     await skill.save();
     res.status(201).json({ data: skill });
   } catch (error) {
@@ -27,10 +67,22 @@ export const createSkill = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-export const updateSkill = async (req: Request, res: Response): Promise<void> => {
+export const updateSkill = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const skill = await SkillModel.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = ownerId;
+    }
+
+    const skill = await SkillModel.findOneAndUpdate(filter, req.body, { new: true, runValidators: true });
     
     if (!skill) {
       res.status(404).json({ error: 'Skill not found' });
@@ -42,10 +94,22 @@ export const updateSkill = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-export const deleteSkill = async (req: Request, res: Response): Promise<void> => {
+export const deleteSkill = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const skill = await SkillModel.findByIdAndDelete(id);
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = ownerId;
+    }
+
+    const skill = await SkillModel.findOneAndDelete(filter);
     
     if (!skill) {
       res.status(404).json({ error: 'Skill not found' });

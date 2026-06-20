@@ -76,6 +76,10 @@ router.get('/', protect, restrictTo('owner', 'admin'), async (req: Authenticated
     const { resourceType, search } = req.query;
     const filter: Record<string, any> = {};
 
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = req.user?.id;
+    }
+
     if (resourceType) {
       filter.resourceType = resourceType;
     }
@@ -190,9 +194,22 @@ router.delete(
         return;
       }
 
-      // Find the record to get resourceType
+      // Find the record to get resourceType and owner
       const record = await UploadRecordModel.findOne({ publicId });
-      const resourceType = record ? record.resourceType : 'image';
+      if (!record) {
+        res.status(404).json({ error: 'Upload record not found' });
+        return;
+      }
+
+      // Verify ownership
+      if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+        if (record.ownerId && record.ownerId.toString() !== req.user?.id) {
+          res.status(403).json({ error: 'You do not have permission to delete this asset' });
+          return;
+        }
+      }
+
+      const resourceType = record.resourceType || 'image';
 
       // Delete from Cloudinary
       await deleteAsset(publicId, resourceType);

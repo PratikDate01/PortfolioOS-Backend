@@ -1,10 +1,33 @@
 import { Request, Response } from 'express';
 import { ExperienceModel } from '../models/experience.model';
+import { UserModel } from '../models/user.model';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
-export const getExperiences = async (req: Request, res: Response): Promise<void> => {
+export const getExperiences = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { type } = req.query;
+    const { type, username } = req.query;
     const filter: Record<string, any> = {};
+
+    // Enforce tenant boundary
+    if (username) {
+      const user = await UserModel.findOne({ username: String(username).toLowerCase().trim() });
+      if (!user) {
+        res.status(200).json({ data: [] });
+        return;
+      }
+      filter.ownerId = user._id;
+    } else if (req.user?.id) {
+      filter.ownerId = req.user.id;
+    } else {
+      // Public fallback: retrieve primary superadmin's experiences
+      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
+      if (primaryOwner) {
+        filter.ownerId = primaryOwner._id;
+      } else {
+        res.status(200).json({ data: [] });
+        return;
+      }
+    }
 
     if (type) {
       filter.type = type;
@@ -17,9 +40,19 @@ export const getExperiences = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const createExperience = async (req: Request, res: Response): Promise<void> => {
+export const createExperience = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const exp = new ExperienceModel(req.body);
+    const expData = req.body;
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    expData.ownerId = ownerId;
+
+    const exp = new ExperienceModel(expData);
     await exp.save();
     res.status(201).json({ data: exp });
   } catch (error) {
@@ -27,10 +60,22 @@ export const createExperience = async (req: Request, res: Response): Promise<voi
   }
 };
 
-export const updateExperience = async (req: Request, res: Response): Promise<void> => {
+export const updateExperience = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const exp = await ExperienceModel.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = ownerId;
+    }
+
+    const exp = await ExperienceModel.findOneAndUpdate(filter, req.body, { new: true, runValidators: true });
     
     if (!exp) {
       res.status(404).json({ error: 'Experience not found' });
@@ -42,10 +87,22 @@ export const updateExperience = async (req: Request, res: Response): Promise<voi
   }
 };
 
-export const deleteExperience = async (req: Request, res: Response): Promise<void> => {
+export const deleteExperience = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const exp = await ExperienceModel.findByIdAndDelete(id);
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = ownerId;
+    }
+
+    const exp = await ExperienceModel.findOneAndDelete(filter);
     
     if (!exp) {
       res.status(404).json({ error: 'Experience not found' });

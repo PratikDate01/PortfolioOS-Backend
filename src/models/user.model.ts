@@ -1,17 +1,18 @@
 import { Schema, model, Document } from 'mongoose';
-import { User as IUser } from '@portfolio-os/types';
+import { User as IUser, SaaSRole, SubscriptionTier } from '@portfolio-os/types';
 import { CloudinaryAssetSchema } from './cloudinaryAsset.schema';
 
 export interface UserDocument extends Omit<IUser, '_id'>, Document {}
 
 const UserSchema = new Schema<UserDocument>(
   {
+    username: { type: String, required: true, unique: true, lowercase: true, trim: true },
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String },
     authProvider: {
       type: String,
-      enum: ['local', 'google', 'github', 'guest'],
+      enum: ['local', 'google', 'github'],
       required: true,
       default: 'local'
     },
@@ -21,9 +22,9 @@ const UserSchema = new Schema<UserDocument>(
     coverImage: { type: CloudinaryAssetSchema },
     role: {
       type: String,
-      enum: ['owner', 'admin', 'member', 'guest'],
+      enum: ['superadmin', 'admin', 'user', 'guest'],
       required: true,
-      default: 'guest'
+      default: 'user'
     },
     bio: { type: String },
     socialLinks: {
@@ -31,6 +32,13 @@ const UserSchema = new Schema<UserDocument>(
       linkedin: { type: String },
       twitter: { type: String },
       website: { type: String }
+    },
+    githubUsername: { type: String },
+    subscriptionTier: {
+      type: String,
+      enum: ['free', 'pro', 'premium', 'enterprise'],
+      required: true,
+      default: 'free'
     },
     xp: { type: Number, required: true, default: 0 },
     level: { type: Number, required: true, default: 1 },

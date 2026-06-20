@@ -1,5 +1,11 @@
 import { Request, Response } from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { UserModel } from '../models/user.model';
+import { PortfolioModel } from '../models/portfolio.model';
+import { ProjectModel } from '../models/project.model';
+import { SkillModel } from '../models/skill.model';
+import { ExperienceModel } from '../models/experience.model';
+import { CertificationModel } from '../models/certification.model';
 
 // In-memory session storage (message history per session)
 const sessions = new Map<string, { role: string; content: string }[]>();
@@ -7,7 +13,7 @@ const SESSION_MAX_MESSAGES = 20;
 
 // Rate limiting: track requests per IP
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 10; // requests per window
+const RATE_LIMIT = 15; // requests per window
 const RATE_WINDOW_MS = 60 * 1000; // 1 minute
 
 function checkRateLimit(ip: string): boolean {
@@ -27,85 +33,99 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-// System prompt with Pratik's portfolio context
-const SYSTEM_PROMPT = `You are an AI assistant on Pratik Date's portfolio website. Your job is to answer questions about Pratik's skills, projects, experience, and education in a helpful, friendly, and professional manner.
+/**
+ * Dynamically builds a system prompt based on user portfolio context from DB
+ */
+function buildSystemPrompt(user: any, portfolio: any, projects: any[], skills: any[], experiences: any[], certs: any[]): string {
+  const name = user.name;
+  const email = user.email;
+  const github = user.githubUsername || portfolio.githubUsername || 'Not provided';
+  const bio = portfolio.bio || user.bio || '';
+  
+  const projectsText = projects
+    .map((p, idx) => `${idx + 1}. ${p.title} — ${p.summary} (Tech: ${p.techStack.join(', ')})`)
+    .join('\n');
 
-Here is Pratik's background:
+  const skillsText = skills
+    .map(s => `- ${s.name} (${s.category}, Proficiency: ${s.proficiency}%)`)
+    .join('\n');
+
+  const expText = experiences
+    .map(e => {
+      const start = e.startDate ? new Date(e.startDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) : '';
+      const end = e.endDate ? new Date(e.endDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) : 'Present';
+      return `- ${e.role} at ${e.organization} (${e.type}, ${start} - ${end}): ${e.description}`;
+    })
+    .join('\n');
+
+  const certText = certs
+    .map(c => `- ${c.title} issued by ${c.issuer}`)
+    .join('\n');
+
+  return `You are an AI assistant on ${name}'s portfolio website. Your job is to answer questions about ${name}'s skills, projects, experience, and education in a helpful, friendly, and professional manner.
+
+Here is ${name}'s professional background:
 
 **About:**
-- Full name: Pratik Satish Date
-- Location: Pune, Maharashtra, India
-- Email: pratikdate.sknsits.it@gmail.com
-- Phone: +91 7666394641
-- GitHub: github.com/PratikDate01
-- LinkedIn: linkedin.com/in/pratik-date-a87025292
-
-**Education:**
-- B.E. in Information Technology — SKN Sinhgad Institute of Technology and Sciences, Lonavala (2024–2027)
-- Diploma in Information Technology — Sou. Venutai Chavan Polytechnic, Pune (2021–2024)
+- Full name: ${name}
+- Email: ${email}
+- GitHub: ${github}
+- Bio: ${bio}
 
 **Work Experience:**
-- Web Development Intern at Labmentix (Oct 2024 – Jan 2025): Built responsive UI with React.js, built REST APIs with Node.js & Express.js, integrated MongoDB for data management.
-- AI/ML Virtual Intern at AICTE Edunet Foundation powered by IBM SkillsBuild (Feb 2025 – Apr 2025): Developed machine learning models, worked on computer vision and NLP projects, built AI prototypes using TensorFlow & Scikit-learn.
+${expText || 'No experience listed yet.'}
 
 **Projects:**
-1. SpeakWrite — Text-to-speech web app with custom voice options (HTML, CSS, JavaScript, React.js)
-2. Mind Map Generator — Interactive visual tool for creating mind maps (HTML, CSS, JavaScript, React.js)
-3. AI Code Reviewer System — AI-powered code review tool using Gemini API (Node.js, Express.js, React.js, Gemini API)
-4. Online Freelance Marketplace — Full-stack platform connecting freelancers and clients (React.js, Node.js, Express.js, MongoDB)
-5. Drive Clone System — Cloud file storage with secure auth (React.js, Node.js, Express.js, MongoDB, Cloud Storage)
-6. Lost and Found Portal — Campus item recovery platform (React.js, Node.js, Express.js, MongoDB)
+${projectsText || 'No projects listed yet.'}
 
 **Skills:**
-- Frontend: HTML, CSS, JavaScript, TypeScript, React.js, Next.js, Tailwind CSS
-- Backend: Node.js, Express.js, REST APIs
-- Database: MongoDB, Mongoose, MySQL
-- AI/ML: TensorFlow, Scikit-learn, Gemini API
-- DevOps: Git, GitHub, Docker, Postman
-- Cloud: AWS (Solutions Architecture), Vercel, Netlify
+${skillsText || 'No skills listed yet.'}
 
 **Certifications:**
-- Accenture North America — Software Engineering Job Simulation
-- AWS Solutions Architecture — Job Simulation (Forage)
-- Tata Group — GenAI Data Analytics Simulation
-- Microsoft — Foundational C# with Microsoft
-- IBM SkillsBuild — Web Development & AI Fundamentals
+${certText || 'No certifications listed yet.'}
 
 Rules:
-- Only answer questions related to Pratik's portfolio, skills, projects, and professional background.
-- If asked about something unrelated, politely redirect the conversation to Pratik's portfolio.
+- Only answer questions related to ${name}'s portfolio, skills, projects, and professional background.
+- If asked about something unrelated, politely redirect the conversation to ${name}'s portfolio.
 - Keep responses concise (2-4 sentences unless more detail is requested).
-- Be enthusiastic about Pratik's work but honest — don't exaggerate.
-- If you don't know something specific about Pratik, say so rather than making things up.`;
+- Be enthusiastic about ${name}'s work but honest — don't exaggerate.
+- If you don't know something specific about ${name}, say so rather than making things up.`;
+}
 
-function getLocalFallbackResponse(message: string): string {
+/**
+ * Hardcoded fallback for rate limits or api issues
+ */
+function getLocalFallbackResponse(
+  message: string,
+  user: any,
+  projects: any[],
+  skills: any[],
+  experiences: any[],
+  certs: any[]
+): string {
   const msg = message.toLowerCase();
+  const name = user.name;
   
   if (msg.includes('contact') || msg.includes('email') || msg.includes('phone') || msg.includes('call') || msg.includes('reach') || msg.includes('linkedin') || msg.includes('github')) {
-    return "You can reach Pratik Satish Date via email at pratikdate.sknsits.it@gmail.com, or phone at +91 7666394641. You can also view his GitHub profile (github.com/PratikDate01) or connect with him on LinkedIn (linkedin.com/in/pratik-date-a87025292).";
+    return `You can reach ${name} via email at ${user.email}. You can also check out their GitHub profile at github.com/${user.githubUsername || 'username'}.`;
   }
   
   if (msg.includes('skill') || msg.includes('tech') || msg.includes('languages') || msg.includes('database') || msg.includes('framework')) {
-    return "Pratik's core technical skills include Frontend (HTML, CSS, JavaScript, TypeScript, React.js, Next.js, Tailwind CSS), Backend (Node.js, Express.js, REST APIs), Databases (MongoDB, Mongoose, MySQL), and tools/cloud platforms like AWS (Solutions Architecture), Docker, Git, and GitHub.";
+    const list = skills.map(s => s.name).slice(0, 8).join(', ');
+    return `${name}'s core technical skills include: ${list || 'various software engineering disciplines'}.`;
   }
   
   if (msg.includes('project') || msg.includes('build') || msg.includes('make') || msg.includes('work')) {
-    return "Pratik has built several impressive projects:\n1. **SpeakWrite**: Text-to-speech React app.\n2. **Mind Map Generator**: Visual mapping tool.\n3. **AI Code Reviewer System**: AI-powered feedback tool using Gemini.\n4. **Online Freelance Marketplace**: Full-stack platform.\n5. **Drive Clone System**: Cloud file storage.\n6. **Lost and Found Portal**: Campus item recovery platform.";
+    const list = projects.map(p => p.title).slice(0, 5).join(', ');
+    return `${name} has worked on several projects, including: ${list || 'creative software solutions'}.`;
   }
   
   if (msg.includes('experience') || msg.includes('intern') || msg.includes('job')) {
-    return "Pratik has completed two notable internships:\n1. **Web Development Intern at Labmentix** (Oct 2024 – Jan 2025): Developed React UIs, Express APIs, and MongoDB integrations.\n2. **AI/ML Virtual Intern at AICTE Edunet (IBM)** (Feb – Apr 2025): Developed TensorFlow prototypes and NLP/Computer Vision models.";
+    const list = experiences.map(e => `${e.role} at ${e.organization}`).slice(0, 3).join(', ');
+    return `${name}'s experience includes: ${list || 'various professional engagements'}.`;
   }
   
-  if (msg.includes('education') || msg.includes('college') || msg.includes('degree') || msg.includes('diploma') || msg.includes('study')) {
-    return "Pratik is pursuing a B.E. in Information Technology at SKN Sinhgad Institute of Technology and Sciences, Lonavala (2024-2027). He also holds a Diploma in IT from Sou. Venutai Chavan Polytechnic, Pune (2021-2024).";
-  }
-  
-  if (msg.includes('cert') || msg.includes('credential')) {
-    return "Pratik holds multiple professional certifications, including software engineering and GenAI simulations from Accenture, AWS Solutions Architecture, Microsoft (Foundational C#), Tata Group (GenAI Data Analytics), and IBM SkillsBuild.";
-  }
-  
-  return "I'd love to chat more about Pratik's skills and background! However, the AI chat is currently experiencing high demand and rate limits. Please check out the interactive sections on the page or contact Pratik directly at pratikdate.sknsits.it@gmail.com.";
+  return `I'd love to chat more about ${name}'s skills and background! However, the AI assistant is currently experiencing high request volumes. Please browse the sections of the page or contact ${name} directly.`;
 }
 
 export const chatWithAI = async (req: Request, res: Response) => {
@@ -121,19 +141,45 @@ export const chatWithAI = async (req: Request, res: Response) => {
       });
     }
 
-    const { message, sessionId } = req.body;
+    const { message, sessionId, username } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    if (message.length > 1000) {
-      return res.status(400).json({ error: 'Message too long. Please keep it under 1000 characters.' });
+    // Resolve tenant details dynamically
+    let targetUser = null;
+    if (username) {
+      targetUser = await UserModel.findOne({ username: String(username).toLowerCase().trim() });
     }
+    
+    if (!targetUser) {
+      targetUser = await UserModel.findOne({ role: 'superadmin' });
+    }
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Tenant context not found' });
+    }
+
+    const ownerId = targetUser._id;
+    const portfolio = await PortfolioModel.findOne({ ownerId }) || {};
+    const projects = await ProjectModel.find({ ownerId, status: 'published' });
+    const skills = await SkillModel.find({ ownerId });
+    const experiences = await ExperienceModel.find({ ownerId });
+    const certs = await CertificationModel.find({ ownerId });
+
+    const systemPrompt = buildSystemPrompt(targetUser, portfolio, projects, skills, experiences, certs);
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(503).json({ error: 'AI service is not configured' });
+      const fallbackReply = getLocalFallbackResponse(message, targetUser, projects, skills, experiences, certs);
+      return res.json({
+        data: {
+          reply: `${fallbackReply}\n\n*(Note: The AI assistant is currently using a lightweight local engine.)*`,
+          sessionId: sid,
+          isFallback: true
+        }
+      });
     }
 
     // Get or create session
@@ -146,12 +192,10 @@ export const chatWithAI = async (req: Request, res: Response) => {
     history = sessions.get(sid)!;
     history.push({ role: 'user', content: message.trim() });
 
-    // Trim history to prevent token overflow
     if (history.length > SESSION_MAX_MESSAGES) {
       history.splice(0, history.length - SESSION_MAX_MESSAGES);
     }
 
-    // Build conversation for Gemini
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
@@ -159,12 +203,11 @@ export const chatWithAI = async (req: Request, res: Response) => {
       .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
       .join('\n');
 
-    const fullPrompt = `${SYSTEM_PROMPT}\n\nConversation so far:\n${conversationText}\n\nAssistant:`;
+    const fullPrompt = `${systemPrompt}\n\nConversation so far:\n${conversationText}\n\nAssistant:`;
 
     const result = await model.generateContent(fullPrompt);
     const reply = result.response.text().trim();
 
-    // Store assistant reply
     history.push({ role: 'assistant', content: reply });
 
     res.json({
@@ -175,39 +218,312 @@ export const chatWithAI = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('AI chat error:', error);
-    
-    // Check if it is a quota or rate-limit error (429 or containing quota/rate limit text)
-    const errString = String(error).toLowerCase();
-    const isQuotaError = 
-      (error && (error as any).status === 429) || 
-      errString.includes('quota') || 
-      errString.includes('rate limit') || 
-      errString.includes('too many requests') ||
-      errString.includes('429');
-
-    if (isQuotaError) {
-      const { message } = req.body;
-      const fallbackReply = getLocalFallbackResponse(message || '');
-      
-      // Store fallback reply in history if it exists
-      if (history) {
-        history.push({ role: 'assistant', content: fallbackReply });
-      }
-
-      return res.json({
-        data: {
-          reply: `${fallbackReply}\n\n*(Note: The AI assistant is currently using a lightweight local engine due to high service traffic.)*`,
-          sessionId: sid,
-          isFallback: true
-        }
-      });
-    }
-
     res.status(500).json({ error: 'Failed to generate response. Please try again.' });
   }
 };
 
-// Helper to safely get or initialize a session ID before try/catch
+/**
+ * AI RESUME PARSING ENDPOINT
+ */
+export const parseResume = async (req: Request, res: Response) => {
+  try {
+    const { resumeText } = req.body;
+    if (!resumeText) {
+      return res.status(400).json({ error: 'resumeText is required' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'AI service is not configured' });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const prompt = `Parse the following resume text and structure it as JSON containing lists of:
+    1. "skills" (array of strings)
+    2. "experience" (array of objects with keys: organization, role, description, startDate, endDate)
+    3. "education" (array of objects with keys: institution, degree, year)
+    Return ONLY clean JSON code. No markdown boxes.
+    
+    Resume content:
+    ${resumeText}`;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    res.json({ data: JSON.parse(cleanJson) });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to parse resume with AI' });
+  }
+};
+
+/**
+ * AI BIO GENERATOR
+ */
+export const generateBio = async (req: Request, res: Response) => {
+  try {
+    const { skills, role, style } = req.body; // style: creative, corporate, professional, brief
+    if (!skills || !role) {
+      return res.status(400).json({ error: 'skills and role parameters are required' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'AI service is not configured' });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const prompt = `Generate a compelling developer biography for a portfolio.
+    Role: ${role}
+    Key skills: ${skills.join(', ')}
+    Tone style: ${style || 'professional'}
+    Keep the bio under 120 words.`;
+
+    const result = await model.generateContent(prompt);
+    res.json({ data: { bio: result.response.text().trim() } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate biography with AI' });
+  }
+};
+
+/**
+ * AI PROJECT DESCRIPTION GENERATOR
+ */
+export const generateProjectDesc = async (req: Request, res: Response) => {
+  try {
+    const { title, techStack, summary } = req.body;
+    if (!title || !techStack) {
+      return res.status(400).json({ error: 'title and techStack parameters are required' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'AI service is not configured' });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const prompt = `Write an detailed project description for a developer case study.
+    Project Title: ${title}
+    Tech Stack: ${techStack.join(', ')}
+    Basic outline: ${summary || ''}
+    
+    Format the description into 3 logical sections:
+    1. Problem Statement
+    2. Challenges & Tech Choices
+    3. Results & Achievements
+    
+    Make it sound modern, professional, and impact-driven.`;
+
+    const result = await model.generateContent(prompt);
+    res.json({ data: { description: result.response.text().trim() } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate project description' });
+  }
+};
+
+/**
+ * AI SKILLS EXTRACTOR
+ */
+export const extractSkills = async (req: Request, res: Response) => {
+  try {
+    const { text } = req.body;
+    if (!text) {
+      return res.status(400).json({ error: 'Text is required for skills extraction' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'AI service is not configured' });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const prompt = `Analyze this text and extract all software engineering, technical, and programming language skills.
+    Return ONLY a JSON array of strings containing the skills.
+    
+    Text:
+    ${text}`;
+
+    const result = await model.generateContent(prompt);
+    const cleanJson = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    res.json({ data: JSON.parse(cleanJson) });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to extract skills with AI' });
+  }
+};
+
+/**
+ * AI EXPERIENCE FORMATTER
+ */
+export const formatExperience = async (req: Request, res: Response) => {
+  try {
+    const { role, organization, description } = req.body;
+    if (!role || !description) {
+      return res.status(400).json({ error: 'role and description parameters are required' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'AI service is not configured' });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const prompt = `Transform the following job description into professional resume bullet points.
+    Role: ${role} at ${organization || 'Company'}
+    Input description: ${description}
+    
+    Generate 3-4 bullet points starting with strong action verbs (e.g. Led, Developed, Optimized) and include metrics/impacts where possible.`;
+
+    const result = await model.generateContent(prompt);
+    res.json({ data: { formattedPoints: result.response.text().trim() } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to format experience with AI' });
+  }
+};
+
+/**
+ * AI SEO OPTIMIZER
+ */
+export const optimizeSeo = async (req: Request, res: Response) => {
+  try {
+    const { name, bio, role } = req.body;
+    if (!name || !role) {
+      return res.status(400).json({ error: 'name and role parameters are required' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'AI service is not configured' });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const prompt = `Generate optimized SEO title and meta description tag settings for a developer's portfolio website.
+    Name: ${name}
+    Role: ${role}
+    Bio: ${bio || ''}
+    
+    Return ONLY a JSON object containing keys "title" and "description".`;
+
+    const result = await model.generateContent(prompt);
+    const cleanJson = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    res.json({ data: JSON.parse(cleanJson) });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to optimize SEO tags' });
+  }
+};
+
+/**
+ * AI PORTFOLIO REVIEWER
+ */
+export const reviewPortfolio = async (req: Request, res: Response) => {
+  try {
+    const { name, bio, projectsCount, skillsCount } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'AI service is not configured' });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const prompt = `Act as an expert technical recruiter and portfolio reviewer.
+    Critique this portfolio summary:
+    Developer: ${name}
+    Biography: ${bio || 'None listed'}
+    Number of projects: ${projectsCount || 0}
+    Number of skills: ${skillsCount || 0}
+    
+    Provide constructive critique in bullet points, highlighting:
+    1. Strengths
+    2. Weaknesses / Gaps
+    3. Exact tips to make it more appealing to tech recruiters.`;
+
+    const result = await model.generateContent(prompt);
+    res.json({ data: { critique: result.response.text().trim() } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to review portfolio with AI' });
+  }
+};
+
+/**
+ * AI RESUME REVIEWER
+ */
+export const reviewResume = async (req: Request, res: Response) => {
+  try {
+    const { resumeText } = req.body;
+    if (!resumeText) {
+      return res.status(400).json({ error: 'resumeText is required' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'AI service is not configured' });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const prompt = `Review this resume text as a hiring manager. Highlight grammar errors, action-verb suggestions, formatting issues, and rate its layout out of 100.
+    
+    Resume:
+    ${resumeText}`;
+
+    const result = await model.generateContent(prompt);
+    res.json({ data: { review: result.response.text().trim() } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to review resume with AI' });
+  }
+};
+
+/**
+ * AI PORTFOLIO GENERATOR (creates default structures)
+ */
+export const generatePortfolioTemplate = async (req: Request, res: Response) => {
+  try {
+    const { name, role, details } = req.body;
+    if (!name || !role) {
+      return res.status(400).json({ error: 'name and role parameters are required' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'AI service is not configured' });
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const prompt = `Generate portfolio settings, sample project outlines, and skill categories for a developer.
+    Developer name: ${name}
+    Role: ${role}
+    Background: ${details || 'None'}
+    
+    Return ONLY a JSON containing keys: "headline", "bio", "suggestedProjects" (array of title/summary), "suggestedSkills" (array of name/category).
+    No markdown formatting blocks.`;
+
+    const result = await model.generateContent(prompt);
+    const cleanJson = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    res.json({ data: JSON.parse(cleanJson) });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate portfolio template' });
+  }
+};
+
 function sessionIdFromReq(req: Request): string {
   const { sessionId } = req.body;
   return sessionId || `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

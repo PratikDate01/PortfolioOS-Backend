@@ -1,81 +1,61 @@
 import { Router } from 'express';
-import { register, login, getMe, guestLogin } from '../controllers/auth.controller';
+import { register, login, getMe, guestLogin, handleOAuthCallback } from '../controllers/auth.controller';
 import { protect } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { registerSchema, loginSchema } from '../middleware/schemas';
 import { UserModel } from '../models/user.model';
-import jwt from 'jsonwebtoken';
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-portfolio-os-secret-key-12345';
-const JWT_EXPIRES_IN = '1d';
-
-const generateToken = (payload: { id: string; role: string; email: string }) => {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-};
-
+// ─── Core Auth Routes ───────────────────────────────────────────────────
 router.post('/register', validate(registerSchema), register);
 router.post('/login', validate(loginSchema), login);
 router.post('/guest', guestLogin);
 router.get('/me', protect, getMe);
 
-// OAuth Google Auth Route
-router.get('/google', (req, res) => {
-  const email = 'google-developer@portfolio-os.local';
-  const name = 'Google Developer';
-  
-  // Find or create user
-  UserModel.findOne({ email }).then(async (user) => {
-    let finalUser = user;
-    if (!user) {
-      finalUser = new UserModel({
-        name,
-        email,
-        authProvider: 'google',
-        providerId: 'google_mock_id_12345',
-        role: 'member',
-        xp: 120,
-        level: 1,
-        isVerified: true
-      });
-      await finalUser.save();
+// ─── Check username availability ────────────────────────────────────────
+router.get('/check-username/:username', async (req, res) => {
+  try {
+    const username = req.params.username.toLowerCase().trim();
+    if (username.length < 3) {
+      res.status(400).json({ error: 'Username must be at least 3 characters' });
+      return;
     }
-    const token = generateToken({ id: finalUser!._id.toString(), role: finalUser!.role, email: finalUser!.email });
-    res.redirect(`http://localhost:3000/login?token=${token}`);
-  }).catch(err => {
-    console.error(err);
-    res.redirect('http://localhost:3000/login?error=oauth_failed');
-  });
+    const exists = await UserModel.findOne({ username }).lean();
+    res.json({ data: { available: !exists } });
+  } catch {
+    res.status(500).json({ error: 'Server error checking username' });
+  }
 });
 
-// OAuth GitHub Auth Route
-router.get('/github', (req, res) => {
-  const email = 'github-coder@portfolio-os.local';
-  const name = 'GitHub Coder';
+// ─── OAuth Routes (Mock for Development) ────────────────────────────────
+// In production, these would be replaced with real Passport.js strategies.
+// The mock routes simulate the OAuth flow for local development.
 
-  // Find or create user
-  UserModel.findOne({ email }).then(async (user) => {
-    let finalUser = user;
-    if (!user) {
-      finalUser = new UserModel({
-        name,
-        email,
-        authProvider: 'github',
-        providerId: 'github_mock_id_67890',
-        role: 'member',
-        xp: 150,
-        level: 1,
-        isVerified: true
-      });
-      await finalUser.save();
-    }
-    const token = generateToken({ id: finalUser!._id.toString(), role: finalUser!.role, email: finalUser!.email });
-    res.redirect(`http://localhost:3000/login?token=${token}`);
-  }).catch(err => {
-    console.error(err);
-    res.redirect('http://localhost:3000/login?error=oauth_failed');
-  });
+router.get('/google', (req, res) => {
+  handleOAuthCallback(
+    'google',
+    {
+      name: 'Google Developer',
+      email: 'google-developer@portfolio-os.local',
+      providerId: 'google_mock_id_12345',
+      avatarUrl: 'https://ui-avatars.com/api/?name=Google+Dev&background=4285F4&color=fff',
+    },
+    res
+  );
+});
+
+router.get('/github', (req, res) => {
+  handleOAuthCallback(
+    'github',
+    {
+      name: 'GitHub Coder',
+      email: 'github-coder@portfolio-os.local',
+      providerId: 'github_mock_id_67890',
+      avatarUrl: 'https://ui-avatars.com/api/?name=GitHub+Coder&background=24292e&color=fff',
+    },
+    res
+  );
 });
 
 export default router;

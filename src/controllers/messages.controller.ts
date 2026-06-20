@@ -1,12 +1,23 @@
 import { Response } from 'express';
 import { MessageModel } from '../models/message.model';
+import { UserModel } from '../models/user.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { awardXp } from '../services/gamification';
 
 export const getMessages = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { status } = req.query;
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
     const filter: Record<string, any> = {};
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.portfolioOwnerId = ownerId;
+    }
 
     if (status) {
       filter.status = status;
@@ -21,7 +32,22 @@ export const getMessages = async (req: AuthenticatedRequest, res: Response): Pro
 
 export const createMessage = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const msg = new MessageModel(req.body);
+    const msgData = req.body;
+
+    // Resolve portfolioOwnerId if username is provided instead of ID
+    if (!msgData.portfolioOwnerId && msgData.username) {
+      const user = await UserModel.findOne({ username: String(msgData.username).toLowerCase().trim() });
+      if (user) {
+        msgData.portfolioOwnerId = user._id;
+      }
+    }
+
+    if (!msgData.portfolioOwnerId) {
+      res.status(400).json({ error: 'portfolioOwnerId is required' });
+      return;
+    }
+
+    const msg = new MessageModel(msgData);
     await msg.save();
 
     let gamificationResult = null;
@@ -39,8 +65,19 @@ export const updateMessageStatus = async (req: AuthenticatedRequest, res: Respon
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const ownerId = req.user?.id;
 
-    const msg = await MessageModel.findByIdAndUpdate(id, { status }, { new: true, runValidators: true });
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.portfolioOwnerId = ownerId;
+    }
+
+    const msg = await MessageModel.findOneAndUpdate(filter, { status }, { new: true, runValidators: true });
     
     if (!msg) {
       res.status(404).json({ error: 'Message not found' });

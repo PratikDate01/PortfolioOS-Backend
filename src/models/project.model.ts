@@ -2,11 +2,14 @@ import { Schema, model, Document } from 'mongoose';
 import { Project as IProject } from '@portfolio-os/types';
 import { CloudinaryAssetSchema } from './cloudinaryAsset.schema';
 
-export interface ProjectDocument extends Omit<IProject, '_id'>, Document {}
+export interface ProjectDocument extends Omit<IProject, '_id' | 'ownerId'>, Document {
+  ownerId: Schema.Types.ObjectId;
+}
 
 const ProjectSchema = new Schema<ProjectDocument>(
   {
-    slug: { type: String, required: true, unique: true },
+    ownerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    slug: { type: String, required: true },
     title: { type: String, required: true },
     summary: { type: String, required: true },
     description: { type: String, required: true },
@@ -65,8 +68,9 @@ const ProjectSchema = new Schema<ProjectDocument>(
   { timestamps: true }
 );
 
-// Indexes
-ProjectSchema.index({ status: 1, featured: 1, order: 1 });
+// Indexes — slug is unique per-owner, not globally
+ProjectSchema.index({ ownerId: 1, slug: 1 }, { unique: true });
+ProjectSchema.index({ ownerId: 1, status: 1, featured: 1, order: 1 });
 ProjectSchema.index({ title: 'text', tags: 'text' });
 
 export const ProjectModel = model<ProjectDocument>('Project', ProjectSchema);

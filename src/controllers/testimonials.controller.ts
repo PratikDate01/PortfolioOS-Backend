@@ -1,14 +1,39 @@
 import { Request, Response } from 'express';
 import { TestimonialModel } from '../models/testimonial.model';
+import { UserModel } from '../models/user.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
 export const getTestimonials = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { status } = req.query;
+    const { status, username } = req.query;
     const filter: Record<string, any> = {};
 
+    // Enforce tenant boundary
+    if (username) {
+      const user = await UserModel.findOne({ username: String(username).toLowerCase().trim() });
+      if (!user) {
+        res.status(200).json({ data: [] });
+        return;
+      }
+      filter.portfolioOwnerId = user._id;
+    } else if (req.user?.id) {
+      filter.portfolioOwnerId = req.user.id;
+    } else {
+      // Public fallback: retrieve primary superadmin's testimonials
+      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
+      if (primaryOwner) {
+        filter.portfolioOwnerId = primaryOwner._id;
+      } else {
+        res.status(200).json({ data: [] });
+        return;
+      }
+    }
+
     const userRole = req.user?.role;
-    if (userRole === 'owner' || userRole === 'admin') {
+    const isOwner = req.user?.id && filter.portfolioOwnerId && req.user.id.toString() === filter.portfolioOwnerId.toString();
+    const isAdmin = userRole === 'superadmin' || userRole === 'admin';
+
+    if (isAdmin || isOwner) {
       if (status) {
         filter.status = status;
       }
@@ -29,6 +54,20 @@ export const getTestimonials = async (req: AuthenticatedRequest, res: Response):
 export const createTestimonial = async (req: Request, res: Response): Promise<void> => {
   try {
     const testimonialData = req.body;
+    
+    // Resolve portfolioOwnerId if username is provided instead of ID
+    if (!testimonialData.portfolioOwnerId && testimonialData.username) {
+      const user = await UserModel.findOne({ username: String(testimonialData.username).toLowerCase().trim() });
+      if (user) {
+        testimonialData.portfolioOwnerId = user._id;
+      }
+    }
+
+    if (!testimonialData.portfolioOwnerId) {
+      res.status(400).json({ error: 'portfolioOwnerId is required' });
+      return;
+    }
+
     // Set status to pending by default for public submission
     const testimonial = new TestimonialModel({
       ...testimonialData,
@@ -41,13 +80,24 @@ export const createTestimonial = async (req: Request, res: Response): Promise<vo
   }
 };
 
-export const updateTestimonialStatus = async (req: Request, res: Response): Promise<void> => {
+export const updateTestimonialStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const ownerId = req.user?.id;
 
-    const testimonial = await TestimonialModel.findByIdAndUpdate(
-      id,
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.portfolioOwnerId = ownerId;
+    }
+
+    const testimonial = await TestimonialModel.findOneAndUpdate(
+      filter,
       { status },
       { new: true, runValidators: true }
     );
@@ -63,12 +113,23 @@ export const updateTestimonialStatus = async (req: Request, res: Response): Prom
   }
 };
 
-export const updateTestimonial = async (req: Request, res: Response): Promise<void> => {
+export const updateTestimonial = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const testimonialData = req.body;
+    const ownerId = req.user?.id;
 
-    const testimonial = await TestimonialModel.findByIdAndUpdate(id, testimonialData, {
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.portfolioOwnerId = ownerId;
+    }
+
+    const testimonial = await TestimonialModel.findOneAndUpdate(filter, testimonialData, {
       new: true,
       runValidators: true,
     });
@@ -84,10 +145,22 @@ export const updateTestimonial = async (req: Request, res: Response): Promise<vo
   }
 };
 
-export const deleteTestimonial = async (req: Request, res: Response): Promise<void> => {
+export const deleteTestimonial = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const testimonial = await TestimonialModel.findByIdAndDelete(id);
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.portfolioOwnerId = ownerId;
+    }
+
+    const testimonial = await TestimonialModel.findOneAndDelete(filter);
 
     if (!testimonial) {
       res.status(404).json({ error: 'Testimonial not found' });

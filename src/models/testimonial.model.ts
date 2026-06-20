@@ -1,12 +1,14 @@
 import { Schema, model, Document } from 'mongoose';
 import { Testimonial as ITestimonial } from '@portfolio-os/types';
 
-export interface TestimonialDocument extends Omit<ITestimonial, '_id' | 'relatedProjectId'>, Document {
+export interface TestimonialDocument extends Omit<ITestimonial, '_id' | 'relatedProjectId' | 'portfolioOwnerId'>, Document {
+  portfolioOwnerId: Schema.Types.ObjectId;
   relatedProjectId?: Schema.Types.ObjectId;
 }
 
 const TestimonialSchema = new Schema<TestimonialDocument>(
   {
+    portfolioOwnerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     authorName: { type: String, required: true },
     authorRole: { type: String, required: true },
     authorCompany: { type: String },
@@ -26,7 +28,7 @@ const TestimonialSchema = new Schema<TestimonialDocument>(
 );
 
 // Indexes
-TestimonialSchema.index({ status: 1, createdAt: -1 });
+TestimonialSchema.index({ portfolioOwnerId: 1, status: 1, createdAt: -1 });
 
 export const TestimonialModel = model<TestimonialDocument>('Testimonial', TestimonialSchema);
 export default TestimonialModel;

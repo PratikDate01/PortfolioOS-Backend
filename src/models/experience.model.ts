@@ -1,10 +1,13 @@
 import { Schema, model, Document } from 'mongoose';
 import { Experience as IExperience } from '@portfolio-os/types';
 
-export interface ExperienceDocument extends Omit<IExperience, '_id'>, Document {}
+export interface ExperienceDocument extends Omit<IExperience, '_id' | 'ownerId'>, Document {
+  ownerId: Schema.Types.ObjectId;
+}
 
 const ExperienceSchema = new Schema<ExperienceDocument>(
   {
+    ownerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     organization: { type: String, required: true },
     role: { type: String, required: true },
     type: {
@@ -23,6 +26,6 @@ const ExperienceSchema = new Schema<ExperienceDocument>(
 );
 
 // Indexes
-ExperienceSchema.index({ type: 1, startDate: -1 });
+ExperienceSchema.index({ ownerId: 1, type: 1, startDate: -1 });
 
 export const ExperienceModel = model<ExperienceDocument>('Experience', ExperienceSchema);

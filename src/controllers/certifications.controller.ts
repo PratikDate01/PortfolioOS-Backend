@@ -1,11 +1,33 @@
 import { Request, Response } from 'express';
 import { CertificationModel } from '../models/certification.model';
+import { UserModel } from '../models/user.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
-export const getCertifications = async (req: Request, res: Response): Promise<void> => {
+export const getCertifications = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { category } = req.query;
+    const { category, username } = req.query;
     const filter: Record<string, any> = {};
+
+    // Enforce tenant boundary
+    if (username) {
+      const user = await UserModel.findOne({ username: String(username).toLowerCase().trim() });
+      if (!user) {
+        res.status(200).json({ data: [] });
+        return;
+      }
+      filter.ownerId = user._id;
+    } else if (req.user?.id) {
+      filter.ownerId = req.user.id;
+    } else {
+      // Public fallback: retrieve primary superadmin's certifications
+      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
+      if (primaryOwner) {
+        filter.ownerId = primaryOwner._id;
+      } else {
+        res.status(200).json({ data: [] });
+        return;
+      }
+    }
 
     if (category) {
       filter.category = category;
@@ -18,10 +40,16 @@ export const getCertifications = async (req: Request, res: Response): Promise<vo
   }
 };
 
-export const getCertificationById = async (req: Request, res: Response): Promise<void> => {
+export const getCertificationById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const certification = await CertificationModel.findById(id);
+    const filter: Record<string, any> = { _id: id };
+    
+    if (req.user?.id && req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = req.user.id;
+    }
+
+    const certification = await CertificationModel.findOne(filter);
 
     if (!certification) {
       res.status(404).json({ error: 'Certification not found' });
@@ -37,6 +65,15 @@ export const getCertificationById = async (req: Request, res: Response): Promise
 export const createCertification = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const certData = req.body;
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    certData.ownerId = ownerId;
+
     const certification = new CertificationModel(certData);
     await certification.save();
     res.status(201).json({ data: certification });
@@ -45,12 +82,23 @@ export const createCertification = async (req: AuthenticatedRequest, res: Respon
   }
 };
 
-export const updateCertification = async (req: Request, res: Response): Promise<void> => {
+export const updateCertification = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const certData = req.body;
+    const ownerId = req.user?.id;
 
-    const certification = await CertificationModel.findByIdAndUpdate(id, certData, {
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = ownerId;
+    }
+
+    const certification = await CertificationModel.findOneAndUpdate(filter, certData, {
       new: true,
       runValidators: true,
     });
@@ -66,10 +114,22 @@ export const updateCertification = async (req: Request, res: Response): Promise<
   }
 };
 
-export const deleteCertification = async (req: Request, res: Response): Promise<void> => {
+export const deleteCertification = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const certification = await CertificationModel.findByIdAndDelete(id);
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = ownerId;
+    }
+
+    const certification = await CertificationModel.findOneAndDelete(filter);
 
     if (!certification) {
       res.status(404).json({ error: 'Certification not found' });

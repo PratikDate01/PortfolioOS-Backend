@@ -23,6 +23,20 @@ interface GitHubProfile {
   followers: number;
   following: number;
   bio: string | null;
+  company: string | null;
+  location: string | null;
+  blog: string | null;
+  created_at: string;
+  public_gists: number;
+}
+
+export interface GitHubActivity {
+  id: string;
+  type: string;
+  repoName: string;
+  repoUrl: string;
+  message: string;
+  createdAt: string;
 }
 
 export interface GitHubStats {
@@ -33,7 +47,13 @@ export interface GitHubStats {
     profileUrl: string;
     publicRepos: number;
     followers: number;
+    following: number;
     bio: string | null;
+    company: string | null;
+    location: string | null;
+    blog: string | null;
+    createdAt: string;
+    publicGists: number;
   };
   topRepos: {
     name: string;
@@ -45,12 +65,16 @@ export interface GitHubStats {
     topics: string[];
   }[];
   languages: { name: string; percentage: number }[];
+  recentActivity: GitHubActivity[];
   lastUpdated: string;
 }
 
-// In-memory cache
-let cachedStats: GitHubStats | null = null;
-let cacheTimestamp = 0;
+// In-memory cache map to support multi-tenancy
+interface CacheEntry {
+  stats: GitHubStats;
+  timestamp: number;
+}
+const cacheMap = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 async function githubFetch(endpoint: string): Promise<unknown> {
@@ -73,6 +97,77 @@ async function githubFetch(endpoint: string): Promise<unknown> {
   return response.json();
 }
 
+function parseGitHubEvents(events: any[]): GitHubActivity[] {
+  if (!Array.isArray(events)) return [];
+
+  return events
+    .slice(0, 5) // Limit to 5 most recent events
+    .map((event) => {
+      let message = '';
+      const repoName = event.repo?.name || '';
+      const repoUrl = `https://github.com/${repoName}`;
+
+      switch (event.type) {
+        case 'PushEvent': {
+          const ref = event.payload?.ref ? event.payload.ref.replace('refs/heads/', '') : 'main';
+          const commitsCount = event.payload?.commits?.length || 0;
+          const firstCommitMsg = event.payload?.commits?.[0]?.message || '';
+          const commitText = firstCommitMsg ? `: "${firstCommitMsg.split('\n')[0]}"` : '';
+          message = `Pushed ${commitsCount} commit${commitsCount !== 1 ? 's' : ''} to \`${ref}\`${commitText}`;
+          break;
+        }
+        case 'IssuesEvent': {
+          const action = event.payload?.action || 'opened';
+          const issueNumber = event.payload?.issue?.number || '';
+          const issueTitle = event.payload?.issue?.title || '';
+          message = `${action.charAt(0).toUpperCase() + action.slice(1)} issue #${issueNumber}: "${issueTitle}"`;
+          break;
+        }
+        case 'PullRequestEvent': {
+          const action = event.payload?.action || 'opened';
+          const prNumber = event.payload?.pull_request?.number || '';
+          const prTitle = event.payload?.pull_request?.title || '';
+          message = `${action.charAt(0).toUpperCase() + action.slice(1)} pull request #${prNumber}: "${prTitle}"`;
+          break;
+        }
+        case 'WatchEvent': {
+          message = `Starred repository`;
+          break;
+        }
+        case 'CreateEvent': {
+          const refType = event.payload?.ref_type || 'repository';
+          const refName = event.payload?.ref ? ` \`${event.payload.ref}\`` : '';
+          message = `Created ${refType}${refName}`;
+          break;
+        }
+        case 'ForkEvent': {
+          const forkedRepo = event.payload?.forkee?.full_name || '';
+          message = `Forked to \`${forkedRepo}\``;
+          break;
+        }
+        case 'ReleaseEvent': {
+          const releaseName = event.payload?.release?.name || event.payload?.release?.tag_name || 'release';
+          message = `Published release "${releaseName}"`;
+          break;
+        }
+        default: {
+          const cleanType = event.type ? event.type.replace('Event', '') : 'Activity';
+          message = `Performed ${cleanType} action`;
+          break;
+        }
+      }
+
+      return {
+        id: event.id || Math.random().toString(),
+        type: event.type || 'UnknownEvent',
+        repoName,
+        repoUrl,
+        message,
+        createdAt: event.created_at || new Date().toISOString(),
+      };
+    });
+}
+
 function computeLanguages(repos: GitHubRepo[]): { name: string; percentage: number }[] {
   const langCount: Record<string, number> = {};
   let total = 0;
@@ -90,20 +185,24 @@ function computeLanguages(repos: GitHubRepo[]): { name: string; percentage: numb
     .slice(0, 8);
 }
 
-export async function fetchGitHubStats(): Promise<GitHubStats> {
+export async function fetchGitHubStats(githubUsername?: string): Promise<GitHubStats> {
+  const username = (githubUsername || process.env.GITHUB_USERNAME || 'PratikDate01').trim();
   const now = Date.now();
 
   // Return cached if still valid
-  if (cachedStats && now - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedStats;
+  const cached = cacheMap.get(username.toLowerCase());
+  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return cached.stats;
   }
 
-  const username = process.env.GITHUB_USERNAME || 'PratikDate01';
-
   try {
-    const [profileData, reposData] = await Promise.all([
+    const [profileData, reposData, eventsData] = await Promise.all([
       githubFetch(`/users/${username}`) as Promise<GitHubProfile>,
       githubFetch(`/users/${username}/repos?sort=updated&per_page=20&type=owner`) as Promise<GitHubRepo[]>,
+      githubFetch(`/users/${username}/events/public`).catch((err) => {
+        console.warn(`Failed to fetch GitHub events for ${username}:`, err);
+        return [];
+      }) as Promise<any[]>,
     ]);
 
     const topRepos = reposData
@@ -127,40 +226,54 @@ export async function fetchGitHubStats(): Promise<GitHubStats> {
         profileUrl: profileData.html_url,
         publicRepos: profileData.public_repos,
         followers: profileData.followers,
+        following: profileData.following || 0,
         bio: profileData.bio,
+        company: profileData.company,
+        location: profileData.location,
+        blog: profileData.blog,
+        createdAt: profileData.created_at,
+        publicGists: profileData.public_gists || 0,
       },
       topRepos,
       languages: computeLanguages(reposData),
+      recentActivity: parseGitHubEvents(eventsData),
       lastUpdated: new Date().toISOString(),
     };
 
     // Update cache
-    cachedStats = stats;
-    cacheTimestamp = now;
+    cacheMap.set(username.toLowerCase(), { stats, timestamp: now });
 
     return stats;
   } catch (error) {
-    console.error('Failed to fetch GitHub stats:', error);
+    console.error(`Failed to fetch GitHub stats for ${username}:`, error);
 
     // Return stale cache if available
-    if (cachedStats) {
-      return cachedStats;
+    if (cached) {
+      return cached.stats;
     }
 
     // Return empty fallback
     return {
       profile: {
         username,
-        name: 'Pratik Date',
+        name: username,
         avatarUrl: '',
         profileUrl: `https://github.com/${username}`,
         publicRepos: 0,
         followers: 0,
+        following: 0,
         bio: null,
+        company: null,
+        location: null,
+        blog: null,
+        createdAt: new Date().toISOString(),
+        publicGists: 0,
       },
       topRepos: [],
       languages: [],
+      recentActivity: [],
       lastUpdated: new Date().toISOString(),
     };
   }
 }
+

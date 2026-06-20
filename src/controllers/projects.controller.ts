@@ -1,16 +1,44 @@
 import { Request, Response } from 'express';
 import { ProjectModel } from '../models/project.model';
+import { UserModel } from '../models/user.model';
+import { SubscriptionModel } from '../models/subscription.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { awardXp } from '../services/gamification';
+import mongoose from 'mongoose';
 
 export const getProjects = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { category, tag, status, search } = req.query;
+    const { category, tag, status, search, username } = req.query;
     const filter: Record<string, any> = {};
+
+    // Enforce tenant boundary
+    if (username) {
+      const user = await UserModel.findOne({ username: String(username).toLowerCase().trim() });
+      if (!user) {
+        res.status(200).json({ data: [] });
+        return;
+      }
+      filter.ownerId = user._id;
+    } else if (req.user?.id) {
+      // If logged in and no username query, view own content
+      filter.ownerId = req.user.id;
+    } else {
+      // Public fallback: retrieve primary superadmin's projects
+      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
+      if (primaryOwner) {
+        filter.ownerId = primaryOwner._id;
+      } else {
+        res.status(200).json({ data: [] });
+        return;
+      }
+    }
 
     // Restrict guest/member/public users to only see published projects
     const userRole = req.user?.role;
-    if (userRole === 'owner' || userRole === 'admin') {
+    const isOwner = req.user?.id && filter.ownerId && req.user.id.toString() === filter.ownerId.toString();
+    const isAdmin = userRole === 'superadmin' || userRole === 'admin';
+
+    if (isAdmin || isOwner) {
       if (status) {
         filter.status = status;
       }
@@ -35,7 +63,29 @@ export const getProjects = async (req: AuthenticatedRequest, res: Response): Pro
 export const getProjectBySlug = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { slug } = req.params;
-    const project = await ProjectModel.findOne({ slug });
+    const { username } = req.query;
+    const filter: Record<string, any> = { slug };
+
+    if (username) {
+      const user = await UserModel.findOne({ username: String(username).toLowerCase().trim() });
+      if (!user) {
+        res.status(404).json({ error: 'Project not found' });
+        return;
+      }
+      filter.ownerId = user._id;
+    } else if (req.user?.id) {
+      filter.ownerId = req.user.id;
+    } else {
+      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
+      if (primaryOwner) {
+        filter.ownerId = primaryOwner._id;
+      } else {
+        res.status(404).json({ error: 'Project not found' });
+        return;
+      }
+    }
+
+    const project = await ProjectModel.findOne(filter);
 
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
@@ -58,9 +108,29 @@ export const getProjectBySlug = async (req: AuthenticatedRequest, res: Response)
   }
 };
 
-export const createProject = async (req: Request, res: Response): Promise<void> => {
+export const createProject = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const projectData = req.body;
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    // Check plan limits
+    const sub = await SubscriptionModel.findOne({ userId: ownerId });
+    if (sub) {
+      const activeCount = await ProjectModel.countDocuments({ ownerId, status: { $ne: 'archived' } });
+      if (activeCount >= sub.limits.maxProjects) {
+        res.status(403).json({
+          error: `Max projects limit reached for your plan (${sub.limits.maxProjects}). Please upgrade to add more projects.`,
+        });
+        return;
+      }
+    }
+
+    projectData.ownerId = ownerId;
     
     // Generate slug from title if not provided
     if (!projectData.slug && projectData.title) {
@@ -70,10 +140,10 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
         .replace(/(^-|-$)/g, '');
     }
 
-    // Verify uniqueness of slug
-    const existing = await ProjectModel.findOne({ slug: projectData.slug });
+    // Verify uniqueness of slug per owner
+    const existing = await ProjectModel.findOne({ ownerId, slug: projectData.slug });
     if (existing) {
-      res.status(400).json({ error: 'A project with this slug or title already exists' });
+      res.status(400).json({ error: 'A project with this slug or title already exists in your portfolio' });
       return;
     }
 
@@ -86,12 +156,23 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-export const updateProject = async (req: Request, res: Response): Promise<void> => {
+export const updateProject = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const updateData = req.body;
+    const ownerId = req.user?.id;
 
-    const project = await ProjectModel.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = ownerId;
+    }
+
+    const project = await ProjectModel.findOneAndUpdate(filter, updateData, { new: true, runValidators: true });
     
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
@@ -104,13 +185,24 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-export const deleteProject = async (req: Request, res: Response): Promise<void> => {
+export const deleteProject = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = ownerId;
+    }
+
     // Soft delete as per spec: status -> archived
-    const project = await ProjectModel.findByIdAndUpdate(
-      id,
+    const project = await ProjectModel.findOneAndUpdate(
+      filter,
       { status: 'archived' },
       { new: true }
     );

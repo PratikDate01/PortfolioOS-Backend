@@ -17,6 +17,7 @@ import usersRoutes from './routes/users.routes';
 import badgesRoutes from './routes/badges.routes';
 import uploadRoutes from './routes/upload.routes';
 import resumeRoutes from './routes/resume.routes';
+import portfolioRoutes from './routes/portfolio.routes';
 
 const app = express();
 
@@ -69,6 +70,7 @@ app.use('/api/v1/users', usersRoutes);
 app.use('/api/v1/badges', badgesRoutes);
 app.use('/api/v1/upload', uploadRoutes);
 app.use('/api/v1/resume', resumeRoutes);
+app.use('/api/v1/portfolios', portfolioRoutes);
 
 // 404 Route handler
 app.use((req: Request, res: Response) => {

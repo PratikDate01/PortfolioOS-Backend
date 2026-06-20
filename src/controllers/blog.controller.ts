@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { BlogPostModel } from '../models/blogPost.model';
+import { UserModel } from '../models/user.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { awardXp } from '../services/gamification';
 
@@ -11,11 +12,35 @@ const calculateReadingTime = (text: string): number => {
 
 export const getBlogPosts = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { category, tag, status } = req.query;
+    const { category, tag, status, username } = req.query;
     const filter: Record<string, any> = {};
 
+    // Enforce tenant boundary
+    if (username) {
+      const user = await UserModel.findOne({ username: String(username).toLowerCase().trim() });
+      if (!user) {
+        res.status(200).json({ data: [] });
+        return;
+      }
+      filter.ownerId = user._id;
+    } else if (req.user?.id) {
+      filter.ownerId = req.user.id;
+    } else {
+      // Public fallback: retrieve primary superadmin's posts
+      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
+      if (primaryOwner) {
+        filter.ownerId = primaryOwner._id;
+      } else {
+        res.status(200).json({ data: [] });
+        return;
+      }
+    }
+
     const userRole = req.user?.role;
-    if (userRole === 'owner' || userRole === 'admin') {
+    const isOwner = req.user?.id && filter.ownerId && req.user.id.toString() === filter.ownerId.toString();
+    const isAdmin = userRole === 'superadmin' || userRole === 'admin';
+
+    if (isAdmin || isOwner) {
       if (status) {
         filter.status = status;
       }
@@ -39,7 +64,29 @@ export const getBlogPosts = async (req: AuthenticatedRequest, res: Response): Pr
 export const getBlogPostBySlug = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { slug } = req.params;
-    const post = await BlogPostModel.findOne({ slug }).populate('authorId', 'name avatarUrl bio');
+    const { username } = req.query;
+    const filter: Record<string, any> = { slug };
+
+    if (username) {
+      const user = await UserModel.findOne({ username: String(username).toLowerCase().trim() });
+      if (!user) {
+        res.status(404).json({ error: 'Blog post not found' });
+        return;
+      }
+      filter.ownerId = user._id;
+    } else if (req.user?.id) {
+      filter.ownerId = req.user.id;
+    } else {
+      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
+      if (primaryOwner) {
+        filter.ownerId = primaryOwner._id;
+      } else {
+        res.status(404).json({ error: 'Blog post not found' });
+        return;
+      }
+    }
+
+    const post = await BlogPostModel.findOne(filter).populate('authorId', 'name avatarUrl bio');
 
     if (!post) {
       res.status(404).json({ error: 'Blog post not found' });
@@ -70,6 +117,7 @@ export const createBlogPost = async (req: AuthenticatedRequest, res: Response): 
     }
 
     const postData = req.body;
+    const ownerId = req.user.id;
     
     // Automatically generate slug from title if missing
     if (!postData.slug && postData.title) {
@@ -79,10 +127,10 @@ export const createBlogPost = async (req: AuthenticatedRequest, res: Response): 
         .replace(/(^-|-$)/g, '');
     }
 
-    // Verify slug uniqueness
-    const existing = await BlogPostModel.findOne({ slug: postData.slug });
+    // Verify slug uniqueness per owner
+    const existing = await BlogPostModel.findOne({ ownerId, slug: postData.slug });
     if (existing) {
-      res.status(400).json({ error: 'A blog post with this slug or title already exists' });
+      res.status(400).json({ error: 'A blog post with this slug or title already exists in your portfolio' });
       return;
     }
 
@@ -91,7 +139,8 @@ export const createBlogPost = async (req: AuthenticatedRequest, res: Response): 
 
     const post = new BlogPostModel({
       ...postData,
-      authorId: req.user.id,
+      ownerId,
+      authorId: ownerId,
       readingTimeMinutes,
       publishedAt: postData.status === 'published' ? new Date() : undefined
     });
@@ -103,10 +152,16 @@ export const createBlogPost = async (req: AuthenticatedRequest, res: Response): 
   }
 };
 
-export const updateBlogPost = async (req: Request, res: Response): Promise<void> => {
+export const updateBlogPost = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const updateData = req.body;
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
 
     if (updateData.contentMarkdown) {
       updateData.readingTimeMinutes = calculateReadingTime(updateData.contentMarkdown);
@@ -119,7 +174,12 @@ export const updateBlogPost = async (req: Request, res: Response): Promise<void>
       }
     }
 
-    const post = await BlogPostModel.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = ownerId;
+    }
+
+    const post = await BlogPostModel.findOneAndUpdate(filter, updateData, { new: true, runValidators: true });
     
     if (!post) {
       res.status(404).json({ error: 'Blog post not found' });
@@ -132,10 +192,22 @@ export const updateBlogPost = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const deleteBlogPost = async (req: Request, res: Response): Promise<void> => {
+export const deleteBlogPost = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const post = await BlogPostModel.findByIdAndDelete(id);
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const filter: Record<string, any> = { _id: id };
+    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+      filter.ownerId = ownerId;
+    }
+
+    const post = await BlogPostModel.findOneAndDelete(filter);
     
     if (!post) {
       res.status(404).json({ error: 'Blog post not found' });

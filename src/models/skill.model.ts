@@ -1,11 +1,14 @@
 import { Schema, model, Document } from 'mongoose';
 import { Skill as ISkill } from '@portfolio-os/types';
 
-export interface SkillDocument extends Omit<ISkill, '_id'>, Document {}
+export interface SkillDocument extends Omit<ISkill, '_id' | 'ownerId'>, Document {
+  ownerId: Schema.Types.ObjectId;
+}
 
 const SkillSchema = new Schema<SkillDocument>(
   {
-    name: { type: String, required: true, unique: true },
+    ownerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    name: { type: String, required: true },
     category: {
       type: String,
       enum: ['frontend', 'backend', 'database', 'devops', 'cloud', 'ai', 'other'],
@@ -19,7 +22,8 @@ const SkillSchema = new Schema<SkillDocument>(
   { timestamps: true }
 );
 
-// Indexes
-SkillSchema.index({ category: 1 });
+// Indexes — name is unique per-owner, not globally
+SkillSchema.index({ ownerId: 1, name: 1 }, { unique: true });
+SkillSchema.index({ ownerId: 1, category: 1 });
 
 export const SkillModel = model<SkillDocument>('Skill', SkillSchema);
