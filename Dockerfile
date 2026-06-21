@@ -4,17 +4,16 @@ FROM node:20-alpine AS builder
 WORKDIR /usr/src/app
 
 COPY package.json package-lock.json ./
-COPY backend/package.json ./backend/
-COPY frontend/package.json ./frontend/
 
-# Install dependencies
+# Install all dependencies (development + production) for build step
 RUN npm ci
 
-# Copy source files
-COPY backend/ ./backend/
+# Copy tsconfig and source files
+COPY tsconfig.json ./
+COPY src/ ./src/
 
-# Build packages
-RUN npm run build --w @portfolio-os/api
+# Build typescript code
+RUN npm run build
 
 # Runner stage
 FROM node:20-alpine AS runner
@@ -22,15 +21,16 @@ FROM node:20-alpine AS runner
 WORKDIR /usr/src/app
 
 COPY package.json package-lock.json ./
-COPY backend/package.json ./backend/
 
-# Install production dependencies
+# Install only production dependencies
 RUN npm ci --only=production
 
-COPY --from=builder /usr/src/app/backend/dist ./backend/dist
+# Copy built code from builder
+COPY --from=builder /usr/src/app/dist ./dist
 
 EXPOSE 5000
 
 ENV NODE_ENV=production
 
-CMD ["npm", "run", "start", "--w", "@portfolio-os/api"]
+CMD ["npm", "run", "start"]
+
