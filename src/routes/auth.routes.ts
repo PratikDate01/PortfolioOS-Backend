@@ -35,16 +35,98 @@ router.get('/check-username/:username', async (req, res) => {
 // The mock routes simulate the OAuth flow for local development.
 
 router.get('/google', (req, res) => {
-  handleOAuthCallback(
-    'google',
-    {
-      name: 'Google Developer',
-      email: 'google-developer@portfolio-os.local',
-      providerId: 'google_mock_id_12345',
-      avatarUrl: 'https://ui-avatars.com/api/?name=Google+Dev&background=4285F4&color=fff',
-    },
-    res
-  );
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+  const redirectUri = `${backendUrl}/api/v1/auth/google/callback`;
+  
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + 
+    `client_id=${encodeURIComponent(clientId || '')}&` +
+    `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+    `response_type=code&` +
+    `scope=${encodeURIComponent('openid email profile')}&` +
+    `access_type=offline&` +
+    `prompt=consent`;
+  
+  res.redirect(authUrl);
+});
+
+router.get('/google/callback', async (req, res) => {
+  const code = req.query.code as string;
+  const error = req.query.error as string;
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+  if (error || !code) {
+    console.error('Google OAuth error or missing code:', error);
+    res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+    return;
+  }
+
+  try {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+    const redirectUri = `${backendUrl}/api/v1/auth/google/callback`;
+
+    // Exchange authorization code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId || '',
+        client_secret: clientSecret || '',
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errBody = await tokenResponse.text();
+      console.error('Google token exchange failed:', errBody);
+      res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+      return;
+    }
+
+    const tokens = await tokenResponse.json() as { access_token: string };
+    
+    // Fetch user profile info
+    const userinfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+      },
+    });
+
+    if (!userinfoResponse.ok) {
+      const errBody = await userinfoResponse.text();
+      console.error('Google userinfo retrieval failed:', errBody);
+      res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+      return;
+    }
+
+    const profile = await userinfoResponse.json() as {
+      sub: string;
+      name: string;
+      email: string;
+      picture?: string;
+    };
+
+    // Call handleOAuthCallback helper
+    await handleOAuthCallback(
+      'google',
+      {
+        name: profile.name || profile.email.split('@')[0],
+        email: profile.email,
+        providerId: profile.sub,
+        avatarUrl: profile.picture,
+      },
+      res
+    );
+  } catch (err) {
+    console.error('Exception during Google OAuth callback:', err);
+    res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+  }
 });
 
 router.get('/github', (req, res) => {
