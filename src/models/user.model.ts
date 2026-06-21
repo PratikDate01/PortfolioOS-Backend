@@ -40,8 +40,6 @@ const UserSchema = new Schema<UserDocument>(
       required: true,
       default: 'free'
     },
-    xp: { type: Number, required: true, default: 0 },
-    level: { type: Number, required: true, default: 1 },
     badgeIds: [{ type: Schema.Types.ObjectId, ref: 'Badge' }],
     refreshTokenHash: { type: String },
     isVerified: { type: Boolean, required: true, default: false },

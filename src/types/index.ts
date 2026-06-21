@@ -39,8 +39,6 @@ export interface User {
   };
   githubUsername?: string;
   subscriptionTier: SubscriptionTier;
-  xp: number;
-  level: number;
   badgeIds: string[];
   refreshTokenHash?: string;
   isVerified: boolean;

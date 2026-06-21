@@ -59,8 +59,6 @@ const seed = async () => {
       authProvider: 'local',
       isVerified: true,
       subscriptionTier: 'premium',
-      xp: 1500,
-      level: 5,
       bio: 'IT Engineering student with hands-on experience in full-stack development, AI/ML, and cloud technologies.',
       githubUsername: 'PratikDate01',
       socialLinks: {
@@ -107,8 +105,6 @@ const seed = async () => {
       authProvider: 'local',
       isVerified: true,
       subscriptionTier: 'free',
-      xp: 120,
-      level: 1,
       bio: 'Developer and tech enthusiast.',
     });
     await regularUser.save();

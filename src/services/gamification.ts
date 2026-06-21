@@ -11,7 +11,7 @@ async function ensureBadgesExist() {
       title: 'First Steps',
       description: 'You took your first active step on the Portfolio OS!',
       iconUrl: '👣',
-      xpReward: 50,
+      xpReward: 0,
       criteria: 'Any progress event'
     },
     {
@@ -19,7 +19,7 @@ async function ensureBadgesExist() {
       title: 'Chatterbox',
       description: 'Awarded for posting a blog comment.',
       iconUrl: '💬',
-      xpReward: 50,
+      xpReward: 0,
       criteria: 'Post a comment'
     },
     {
@@ -27,7 +27,7 @@ async function ensureBadgesExist() {
       title: 'Networker',
       description: 'Awarded for reaching out via the contact form.',
       iconUrl: '🤝',
-      xpReward: 100,
+      xpReward: 0,
       criteria: 'Submit contact message'
     },
     {
@@ -35,7 +35,7 @@ async function ensureBadgesExist() {
       title: 'Collector',
       description: 'Awarded for bookmarking 3 or more projects/blogs.',
       iconUrl: '📚',
-      xpReward: 100,
+      xpReward: 0,
       criteria: 'Bookmark 3 items'
     }
   ];
@@ -68,20 +68,13 @@ export async function awardXp(
     const progressEvent = new UserProgressModel({
       userId,
       type,
-      xpAwarded: xpAmount,
+      xpAwarded: 0,
       metadata
     });
     await progressEvent.save();
 
-    // 3. Update user XP & Level
-    const oldLevel = user.level;
-    const newXp = user.xp + xpAmount;
-    const newLevel = Math.floor(newXp / 200) + 1;
-    const levelUp = newLevel > oldLevel;
-
-    user.xp = newXp;
-    user.level = newLevel;
-    await user.save();
+    // 3. Update user XP & Level (Bypassed / Removed)
+    const levelUp = false;
 
     // 4. Ensure badges exist in DB
     await ensureBadgesExist();
@@ -117,13 +110,13 @@ export async function awardXp(
         user.badgeIds.push(badge._id as any);
         await user.save();
         
-        // Award badge XP reward (recursively logs badge_earned event)
-        await awardXp(userId, 'badge_earned', badge.xpReward, { badgeKey: badge.key });
+        // Award badge (recursively logs badge_earned event)
+        await awardXp(userId, 'badge_earned', 0, { badgeKey: badge.key });
         unlockedBadges.push(badge.title);
       }
     }
 
-    return { xpAwarded: xpAmount, levelUp, unlockedBadges };
+    return { xpAwarded: 0, levelUp, unlockedBadges };
   } catch (error) {
     console.error('Error awarding XP:', error);
     return { xpAwarded: 0, levelUp: false, unlockedBadges: [] };

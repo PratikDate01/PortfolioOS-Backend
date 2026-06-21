@@ -32,8 +32,6 @@ router.get('/me/progress', protect, async (req: AuthenticatedRequest, res: Respo
 
     res.status(200).json({
       data: {
-        xp: user.xp,
-        level: user.level,
         badges: user.badgeIds,
         recentActivity: logs
       }

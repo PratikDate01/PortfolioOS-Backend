@@ -107,8 +107,6 @@ function sanitizeUser(user: any) {
     githubUsername: user.githubUsername,
     subscriptionTier: user.subscriptionTier,
     authProvider: user.authProvider,
-    xp: user.xp,
-    level: user.level,
     badgeIds: user.badgeIds,
     isVerified: user.isVerified,
     lastLoginAt: user.lastLoginAt,
@@ -166,8 +164,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       authProvider: 'local',
       isVerified: false,
       subscriptionTier: 'free',
-      xp: 0,
-      level: 1,
     });
 
     await user.save();
@@ -280,8 +276,6 @@ export const guestLogin = async (req: Request, res: Response): Promise<void> => 
       authProvider: 'local',
       role: 'guest',
       subscriptionTier: 'free',
-      xp: 0,
-      level: 1,
       isVerified: false
     });
 
@@ -355,8 +349,6 @@ export async function handleOAuthCallback(
         avatarUrl: profile.avatarUrl,
         role: 'user',
         subscriptionTier: 'free',
-        xp: 0,
-        level: 1,
         isVerified: true, // OAuth emails are verified by the provider
       });
       await user.save();
