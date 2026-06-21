@@ -38,22 +38,22 @@ router.get('/google', (req, res) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   const redirectUri = `${backendUrl}/api/v1/auth/google/callback`;
-  
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + 
+
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${encodeURIComponent(clientId || '')}&` +
     `redirect_uri=${encodeURIComponent(redirectUri)}&` +
     `response_type=code&` +
     `scope=${encodeURIComponent('openid email profile')}&` +
     `access_type=offline&` +
     `prompt=consent`;
-  
+
   res.redirect(authUrl);
 });
 
 router.get('/google/callback', async (req, res) => {
   const code = req.query.code as string;
   const error = req.query.error as string;
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://app.portfolioos.workers.dev';
 
   if (error || !code) {
     console.error('Google OAuth error or missing code:', error);
@@ -90,7 +90,7 @@ router.get('/google/callback', async (req, res) => {
     }
 
     const tokens = await tokenResponse.json() as { access_token: string };
-    
+
     // Fetch user profile info
     const userinfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: {

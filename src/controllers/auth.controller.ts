@@ -11,7 +11,7 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware';
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as string;
 const ACCESS_TOKEN_EXPIRES_IN = '15m'; // 15 minutes access token expiry
-const REFRESH_TOKEN_EXPIRES_IN = '7d'; // 7 days refresh token expiry
+const REFRESH_TOKEN_EXPIRES_IN = '30d'; // 30 days refresh token expiry
 
 const generateToken = (payload: { id: string; role: string; email: string; username: string }) => {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRES_IN });
@@ -31,7 +31,7 @@ const setRefreshTokenCookie = (res: Response, token: string) => {
     httpOnly: true,
     secure: isProd,
     sameSite: isProd ? 'none' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
   });
 };
 
@@ -317,8 +317,8 @@ export async function handleOAuthCallback(
   profile: { name: string; email: string; providerId: string; avatarUrl?: string },
   res: Response
 ): Promise<void> {
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  
+  const frontendUrl = process.env.FRONTEND_URL || 'https://app.portfolioos.workers.dev';
+
   try {
     // Try to find user by provider + providerId first
     let user = await UserModel.findOne({ authProvider: provider, providerId: profile.providerId });
