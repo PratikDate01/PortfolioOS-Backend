@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { BlogPost as IBlogPost } from '@portfolio-os/types';
+import { BlogPost as IBlogPost } from '../types';
 import { CloudinaryAssetSchema } from './cloudinaryAsset.schema';
 
 export interface BlogPostDocument extends Omit<IBlogPost, '_id' | 'authorId' | 'ownerId'>, Document {

@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { User as IUser, SaaSRole, SubscriptionTier } from '@portfolio-os/types';
+import { User as IUser, SaaSRole, SubscriptionTier } from '../types';
 import { CloudinaryAssetSchema } from './cloudinaryAsset.schema';
 
 export interface UserDocument extends Omit<IUser, '_id'>, Document {}

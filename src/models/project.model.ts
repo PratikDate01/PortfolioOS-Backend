@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { Project as IProject } from '@portfolio-os/types';
+import { Project as IProject } from '../types';
 import { CloudinaryAssetSchema } from './cloudinaryAsset.schema';
 
 export interface ProjectDocument extends Omit<IProject, '_id' | 'ownerId'>, Document {

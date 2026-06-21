@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { SiteConfig as ISiteConfig } from '@portfolio-os/types';
+import { SiteConfig as ISiteConfig } from '../types';
 
 export interface SiteConfigDocument extends Omit<ISiteConfig, '_id'>, Document {}
 

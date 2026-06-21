@@ -2,16 +2,36 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { UserModel } from '../models/user.model';
 import { PortfolioModel } from '../models/portfolio.model';
 import { createDefaultSubscription } from '../models/subscription.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-portfolio-os-secret-key-12345';
-const JWT_EXPIRES_IN = '1d'; // Using 1 day for easier local testing
+const JWT_SECRET = process.env.JWT_SECRET as string;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as string;
+const ACCESS_TOKEN_EXPIRES_IN = '15m'; // 15 minutes access token expiry
+const REFRESH_TOKEN_EXPIRES_IN = '7d'; // 7 days refresh token expiry
 
 const generateToken = (payload: { id: string; role: string; email: string; username: string }) => {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRES_IN });
+};
+
+const generateRefreshToken = (payload: { id: string }) => {
+  return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRES_IN });
+};
+
+const hashToken = (token: string): string => {
+  return crypto.createHash('sha256').update(token).digest('hex');
+};
+
+const setRefreshTokenCookie = (res: Response, token: string) => {
+  res.cookie('refreshToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
 };
 
 /**
@@ -160,6 +180,11 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       email: user.email,
       username: user.username,
     });
+    const refreshToken = generateRefreshToken({ id: user._id.toString() });
+    user.refreshTokenHash = hashToken(refreshToken);
+    await user.save();
+
+    setRefreshTokenCookie(res, refreshToken);
 
     res.status(201).json({
       data: {
@@ -199,6 +224,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       email: user.email,
       username: user.username,
     });
+    const refreshToken = generateRefreshToken({ id: user._id.toString() });
+    user.refreshTokenHash = hashToken(refreshToken);
+    await user.save();
+
+    setRefreshTokenCookie(res, refreshToken);
 
     res.status(200).json({
       data: {
@@ -265,6 +295,11 @@ export const guestLogin = async (req: Request, res: Response): Promise<void> => 
       email: guestUser.email,
       username: guestUser.username,
     });
+    const refreshToken = generateRefreshToken({ id: guestUser._id.toString() });
+    guestUser.refreshTokenHash = hashToken(refreshToken);
+    await guestUser.save();
+
+    setRefreshTokenCookie(res, refreshToken);
 
     res.status(200).json({
       data: {
@@ -339,6 +374,11 @@ export async function handleOAuthCallback(
       email: user.email,
       username: user.username,
     });
+    const refreshToken = generateRefreshToken({ id: user._id.toString() });
+    user.refreshTokenHash = hashToken(refreshToken);
+    await user.save();
+
+    setRefreshTokenCookie(res, refreshToken);
 
     res.redirect(`${frontendUrl}/login?token=${token}`);
   } catch (error) {
@@ -346,3 +386,92 @@ export async function handleOAuthCallback(
     res.redirect(`${frontendUrl}/login?error=oauth_failed`);
   }
 }
+
+export const refresh = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const refreshToken = (req as any).cookies?.refreshToken;
+    if (!refreshToken) {
+      res.status(401).json({ error: 'Refresh token not found in cookies' });
+      return;
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
+    } catch (err) {
+      res.status(401).json({ error: 'Invalid or expired refresh token' });
+      return;
+    }
+
+    const user = await UserModel.findById(decoded.id);
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
+    // Verify token hash
+    const tokenHash = hashToken(refreshToken);
+    if (!user.refreshTokenHash || user.refreshTokenHash !== tokenHash) {
+      // Refresh token reuse/theft detected! Clear session in DB.
+      user.refreshTokenHash = undefined;
+      await user.save();
+      res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      });
+      res.status(401).json({ error: 'Token reuse detected. Session terminated.' });
+      return;
+    }
+
+    // Generate new keys (Access + Refresh token rotation)
+    const newAccessToken = generateToken({
+      id: user._id.toString(),
+      role: user.role,
+      email: user.email,
+      username: user.username,
+    });
+    const newRefreshToken = generateRefreshToken({ id: user._id.toString() });
+
+    // Save hash of new refresh token
+    user.refreshTokenHash = hashToken(newRefreshToken);
+    await user.save();
+
+    // Set cookie
+    setRefreshTokenCookie(res, newRefreshToken);
+
+    res.status(200).json({
+      data: {
+        token: newAccessToken,
+        user: sanitizeUser(user),
+      },
+    });
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    res.status(500).json({ error: 'Server error during token refresh' });
+  }
+};
+
+export const logout = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+      const user = await UserModel.findById(userId);
+      if (user) {
+        user.refreshTokenHash = undefined;
+        await user.save();
+      }
+    }
+
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+
+    res.status(200).json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Server error during logout' });
+  }
+};

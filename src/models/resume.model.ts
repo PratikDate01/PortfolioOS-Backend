@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { Resume as IResume } from '@portfolio-os/types';
+import { Resume as IResume } from '../types';
 import { CloudinaryAssetSchema } from './cloudinaryAsset.schema';
 
 export interface ResumeDocument extends Omit<IResume, '_id' | 'userId'>, Document {

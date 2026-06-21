@@ -54,22 +54,36 @@ router.get('/me/bookmarks', protect, async (req: AuthenticatedRequest, res: Resp
 
     const bookmarks = await BookmarkModel.find({ userId });
 
-    const populated = await Promise.all(
-      bookmarks.map(async (b) => {
-        let details = null;
-        if (b.targetType === 'project') {
-          details = await ProjectModel.findById(b.targetId);
-        } else if (b.targetType === 'blogpost') {
-          details = await BlogPostModel.findById(b.targetId);
-        }
-        return {
-          _id: b._id,
-          targetType: b.targetType,
-          targetId: b.targetId,
-          details
-        };
-      })
-    );
+    const projectIds = bookmarks
+      .filter((b) => b.targetType === 'project')
+      .map((b) => b.targetId);
+    const blogpostIds = bookmarks
+      .filter((b) => b.targetType === 'blogpost')
+      .map((b) => b.targetId);
+
+    const [projects, blogposts] = await Promise.all([
+      ProjectModel.find({ _id: { $in: projectIds } }),
+      BlogPostModel.find({ _id: { $in: blogpostIds } })
+    ]);
+
+    const projectMap = new Map(projects.map((p) => [p._id.toString(), p]));
+    const blogpostMap = new Map(blogposts.map((bp) => [bp._id.toString(), bp]));
+
+    const populated = bookmarks.map((b) => {
+      const targetIdStr = b.targetId.toString();
+      let details = null;
+      if (b.targetType === 'project') {
+        details = projectMap.get(targetIdStr) || null;
+      } else if (b.targetType === 'blogpost') {
+        details = blogpostMap.get(targetIdStr) || null;
+      }
+      return {
+        _id: b._id,
+        targetType: b.targetType,
+        targetId: b.targetId,
+        details
+      };
+    });
 
     res.status(200).json({ data: populated });
   } catch (error) {

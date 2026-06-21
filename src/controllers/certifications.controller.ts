@@ -45,7 +45,7 @@ export const getCertificationById = async (req: AuthenticatedRequest, res: Respo
     const { id } = req.params;
     const filter: Record<string, any> = { _id: id };
     
-    if (req.user?.id && req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.id && req.user?.role !== 'superadmin') {
       filter.ownerId = req.user.id;
     }
 
@@ -94,7 +94,7 @@ export const updateCertification = async (req: AuthenticatedRequest, res: Respon
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.ownerId = ownerId;
     }
 
@@ -125,7 +125,7 @@ export const deleteCertification = async (req: AuthenticatedRequest, res: Respon
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.ownerId = ownerId;
     }
 

@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { Experience as IExperience } from '@portfolio-os/types';
+import { Experience as IExperience } from '../types';
 
 export interface ExperienceDocument extends Omit<IExperience, '_id' | 'ownerId'>, Document {
   ownerId: Schema.Types.ObjectId;

@@ -2,6 +2,10 @@ import dotenv from 'dotenv';
 // Load environment variables early
 dotenv.config();
 
+import { validateEnv } from './config/env';
+// Validate required environment settings
+validateEnv();
+
 import app from './app';
 import { connectDB } from './config/db';
 

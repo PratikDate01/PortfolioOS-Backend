@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@portfolio-os/types": "*",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.10.0",
     "cors": "^2.8.5",

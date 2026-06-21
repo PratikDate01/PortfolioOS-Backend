@@ -71,7 +71,7 @@ export const updateExperience = async (req: AuthenticatedRequest, res: Response)
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.ownerId = ownerId;
     }
 
@@ -98,7 +98,7 @@ export const deleteExperience = async (req: AuthenticatedRequest, res: Response)
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.ownerId = ownerId;
     }
 

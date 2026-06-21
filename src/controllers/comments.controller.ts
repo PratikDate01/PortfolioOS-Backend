@@ -8,11 +8,30 @@ export const getComments = async (req: AuthenticatedRequest, res: Response): Pro
     const { postId } = req.params;
     
     // Retrieve comments for the post, populating user details
-    const comments = await CommentModel.find({ postId, status: 'visible' })
+    const page = parseInt(req.query.page as string, 10);
+    const limit = parseInt(req.query.limit as string, 10);
+
+    const commentsQuery = CommentModel.find({ postId, status: 'visible' })
       .populate('authorId', 'name avatarUrl role')
       .sort({ createdAt: 1 });
 
-    res.status(200).json({ data: comments });
+    if (page && limit) {
+      const skip = (page - 1) * limit;
+      const total = await CommentModel.countDocuments({ postId, status: 'visible' });
+      const comments = await commentsQuery.skip(skip).limit(limit);
+      res.status(200).json({
+        data: comments,
+        pagination: {
+          total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } else {
+      const comments = await commentsQuery;
+      res.status(200).json({ data: comments });
+    }
   } catch (error) {
     res.status(500).json({ error: 'Server error listing comments' });
   }

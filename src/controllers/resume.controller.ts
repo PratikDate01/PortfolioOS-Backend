@@ -11,7 +11,7 @@ export const getResumes = async (req: AuthenticatedRequest, res: Response): Prom
 
     if (isDashboardAccess && (userRole === 'superadmin' || userRole === 'admin' || userRole === 'user')) {
       const filter: Record<string, any> = {};
-      if (userRole !== 'superadmin' && userRole !== 'admin') {
+      if (userRole !== 'superadmin') {
         filter.userId = req.user?.id;
       }
       const resumes = await ResumeModel.find(filter).sort({ createdAt: -1 });
@@ -86,7 +86,7 @@ export const updateResume = async (req: AuthenticatedRequest, res: Response): Pr
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.userId = userId;
     }
 
@@ -125,7 +125,7 @@ export const deleteResume = async (req: AuthenticatedRequest, res: Response): Pr
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.userId = userId;
     }
 
@@ -152,7 +152,7 @@ export const setActiveResume = async (req: AuthenticatedRequest, res: Response):
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.userId = userId;
     }
 

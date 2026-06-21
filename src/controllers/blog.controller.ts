@@ -51,11 +51,30 @@ export const getBlogPosts = async (req: AuthenticatedRequest, res: Response): Pr
     if (category) filter.categories = category;
     if (tag) filter.tags = tag;
 
-    const posts = await BlogPostModel.find(filter)
+    const page = parseInt(req.query.page as string, 10);
+    const limit = parseInt(req.query.limit as string, 10);
+
+    const postsQuery = BlogPostModel.find(filter)
       .populate('authorId', 'name avatarUrl')
       .sort({ publishedAt: -1, createdAt: -1 });
 
-    res.status(200).json({ data: posts });
+    if (page && limit) {
+      const skip = (page - 1) * limit;
+      const total = await BlogPostModel.countDocuments(filter);
+      const posts = await postsQuery.skip(skip).limit(limit);
+      res.status(200).json({
+        data: posts,
+        pagination: {
+          total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } else {
+      const posts = await postsQuery;
+      res.status(200).json({ data: posts });
+    }
   } catch (error) {
     res.status(500).json({ error: 'Server error listing blog posts' });
   }
@@ -175,7 +194,7 @@ export const updateBlogPost = async (req: AuthenticatedRequest, res: Response): 
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.ownerId = ownerId;
     }
 
@@ -203,7 +222,7 @@ export const deleteBlogPost = async (req: AuthenticatedRequest, res: Response): 
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.ownerId = ownerId;
     }
 

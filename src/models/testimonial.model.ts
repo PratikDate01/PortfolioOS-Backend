@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { Testimonial as ITestimonial } from '@portfolio-os/types';
+import { Testimonial as ITestimonial } from '../types';
 
 export interface TestimonialDocument extends Omit<ITestimonial, '_id' | 'relatedProjectId' | 'portfolioOwnerId'>, Document {
   portfolioOwnerId: Schema.Types.ObjectId;

@@ -3,6 +3,7 @@ import { AnalyticsEventModel } from '../models/analyticsEvent.model';
 import { UserModel } from '../models/user.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import mongoose from 'mongoose';
+import { cacheService } from '../services/cacheService';
 
 // Record visit for a specific portfolio (based on username)
 export const recordVisit = async (req: Request, res: Response) => {
@@ -154,7 +155,7 @@ export const getAnalyticsSummary = async (req: AuthenticatedRequest, res: Respon
     }
 
     const filter: Record<string, any> = {};
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.portfolioOwnerId = new mongoose.Types.ObjectId(ownerId);
     } else if (req.query.username) {
       // Admins can filter by specific user
@@ -171,10 +172,36 @@ export const getAnalyticsSummary = async (req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    const recentEvents = await AnalyticsEventModel.find(filter)
+    const page = parseInt(req.query.page as string, 10);
+    const limit = parseInt(req.query.limit as string, 10) || 30;
+
+    const cacheKey = `analytics_summary:${portfolioOwnerId.toString()}:${page}:${limit}`;
+    const cached = await cacheService.get(cacheKey);
+    if (cached) {
+      res.json({ data: cached });
+      return;
+    }
+
+    const recentEventsQuery = AnalyticsEventModel.find(filter)
       .sort({ createdAt: -1 })
-      .limit(30)
       .populate('userId', 'name email');
+
+    let recentEvents;
+    let pagination;
+
+    if (page) {
+      const skip = (page - 1) * limit;
+      const total = await AnalyticsEventModel.countDocuments(filter);
+      recentEvents = await recentEventsQuery.skip(skip).limit(limit);
+      pagination = {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      };
+    } else {
+      recentEvents = await recentEventsQuery.limit(limit);
+    }
 
     // Aggregate page views by path for this owner
     const pageViewsByPath = await AnalyticsEventModel.aggregate([
@@ -200,15 +227,18 @@ export const getAnalyticsSummary = async (req: AuthenticatedRequest, res: Respon
       createdAt: { $gte: fiveMinutesAgo }
     });
 
-    res.json({
-      data: {
-        totalVisitors: uniqueSessions.length,
-        activeVisitors: activeSessions.length,
-        recentEvents,
-        pageViewsByPath,
-        eventsByType
-      },
-    });
+    const result = {
+      totalVisitors: uniqueSessions.length,
+      activeVisitors: activeSessions.length,
+      recentEvents,
+      pageViewsByPath,
+      eventsByType,
+      ...(pagination && { pagination })
+    };
+
+    await cacheService.set(cacheKey, result, 30); // cache for 30s
+
+    res.json({ data: result });
   } catch (error) {
     console.error('Analytics summary error:', error);
     res.status(500).json({ error: 'Failed to get analytics summary' });

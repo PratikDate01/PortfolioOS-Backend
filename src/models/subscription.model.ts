@@ -1,5 +1,5 @@
 import { Schema, model, Document, Types } from 'mongoose';
-import { Subscription as ISubscription, SubscriptionTier, SubscriptionLimits, SUBSCRIPTION_PLAN_LIMITS } from '@portfolio-os/types';
+import { Subscription as ISubscription, SubscriptionTier, SubscriptionLimits, SUBSCRIPTION_PLAN_LIMITS } from '../types';
 
 export interface SubscriptionDocument extends Omit<ISubscription, '_id' | 'userId'>, Document {
   userId: Schema.Types.ObjectId;

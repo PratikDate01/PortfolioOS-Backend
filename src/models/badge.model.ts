@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { Badge as IBadge } from '@portfolio-os/types';
+import { Badge as IBadge } from '../types';
 
 export interface BadgeDocument extends Omit<IBadge, '_id'>, Document {}
 

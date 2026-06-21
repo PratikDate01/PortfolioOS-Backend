@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { AuditLog as IAuditLog } from '@portfolio-os/types';
+import { AuditLog as IAuditLog } from '../types';
 
 export interface AuditLogDocument extends Omit<IAuditLog, '_id' | 'actorId'>, Document {
   actorId: Schema.Types.ObjectId;

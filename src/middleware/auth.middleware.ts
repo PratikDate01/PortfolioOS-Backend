@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { SaaSRole } from '@portfolio-os/types';
+import { SaaSRole } from '../types';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-portfolio-os-secret-key-12345';
+const JWT_SECRET = process.env.JWT_SECRET as string;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as string;
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -82,10 +83,29 @@ export const optionalProtect = (req: AuthenticatedRequest, res: Response, next: 
 };
 
 /**
+ * Custom cookie parser middleware to populate req.cookies.
+ */
+export const cookieParser = (req: Request, res: Response, next: NextFunction): void => {
+  const cookieHeader = req.headers.cookie;
+  const cookies: Record<string, string> = {};
+  if (cookieHeader) {
+    cookieHeader.split(';').forEach((cookie) => {
+      const parts = cookie.split('=');
+      if (parts.length === 2) {
+        cookies[parts[0].trim()] = parts[1].trim();
+      }
+    });
+  }
+  (req as any).cookies = cookies;
+  next();
+};
+
+/**
  * Role-based access control middleware.
  * Restricts access to users with one of the specified roles.
+ * System-wide superadmin bypasses all checks.
  */
-export const restrictTo = (...roles: (SaaSRole | 'owner' | 'member')[]) => {
+export const restrictTo = (...roles: string[]) => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ error: 'Not authenticated' });
@@ -93,16 +113,25 @@ export const restrictTo = (...roles: (SaaSRole | 'owner' | 'member')[]) => {
     }
 
     const userRole = req.user.role;
-    const mappedUserRoles: string[] = [userRole];
 
+    // Superadmin bypasses all role restrictions
     if (userRole === 'superadmin') {
-      mappedUserRoles.push('owner');
-    }
-    if (userRole === 'user') {
-      mappedUserRoles.push('owner', 'member');
+      next();
+      return;
     }
 
-    const hasPermission = roles.some((role) => mappedUserRoles.includes(role));
+    let hasPermission = roles.includes(userRole);
+
+    // Hierarchical expansions
+    if (roles.includes('user') && userRole === 'admin') {
+      hasPermission = true;
+    }
+    if (roles.includes('member') && (userRole === 'user' || userRole === 'admin')) {
+      hasPermission = true;
+    }
+    if (roles.includes('owner') && userRole === 'admin') {
+      hasPermission = true;
+    }
 
     if (!hasPermission) {
       res.status(403).json({ error: 'You do not have permission to perform this action' });

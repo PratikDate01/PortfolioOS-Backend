@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { Certification as ICertification } from '@portfolio-os/types';
+import { Certification as ICertification } from '../types';
 import { CloudinaryAssetSchema } from './cloudinaryAsset.schema';
 
 export interface CertificationDocument extends Omit<ICertification, '_id' | 'ownerId'>, Document {

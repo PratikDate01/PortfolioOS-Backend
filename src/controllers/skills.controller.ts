@@ -78,7 +78,7 @@ export const updateSkill = async (req: AuthenticatedRequest, res: Response): Pro
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.ownerId = ownerId;
     }
 
@@ -105,7 +105,7 @@ export const deleteSkill = async (req: AuthenticatedRequest, res: Response): Pro
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.ownerId = ownerId;
     }
 

@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import { cookieParser } from './middleware/auth.middleware';
 import authRoutes from './routes/auth.routes';
 import projectRoutes from './routes/projects.routes';
 import experienceRoutes from './routes/experience.routes';
@@ -23,6 +24,7 @@ const app = express();
 
 // Security Middleware
 app.use(helmet());
+app.use(cookieParser);
 
 // CORS Configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS

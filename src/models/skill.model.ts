@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { Skill as ISkill } from '@portfolio-os/types';
+import { Skill as ISkill } from '../types';
 
 export interface SkillDocument extends Omit<ISkill, '_id' | 'ownerId'>, Document {
   ownerId: Schema.Types.ObjectId;

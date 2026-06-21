@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { Comment as IComment } from '@portfolio-os/types';
+import { Comment as IComment } from '../types';
 
 export interface CommentDocument extends Omit<IComment, '_id' | 'postId' | 'authorId' | 'parentCommentId'>, Document {
   postId: Schema.Types.ObjectId;

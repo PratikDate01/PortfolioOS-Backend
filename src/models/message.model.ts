@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { Message as IMessage } from '@portfolio-os/types';
+import { Message as IMessage } from '../types';
 import { CloudinaryAssetSchema } from './cloudinaryAsset.schema';
 
 export interface MessageDocument extends Omit<IMessage, '_id' | 'portfolioOwnerId'>, Document {

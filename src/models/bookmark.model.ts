@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { Bookmark as IBookmark } from '@portfolio-os/types';
+import { Bookmark as IBookmark } from '../types';
 
 export interface BookmarkDocument extends Omit<IBookmark, '_id' | 'userId' | 'targetId'>, Document {
   userId: Schema.Types.ObjectId;

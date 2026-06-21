@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { UserProgressEvent as IUserProgressEvent } from '@portfolio-os/types';
+import { UserProgressEvent as IUserProgressEvent } from '../types';
 
 export interface UserProgressDocument extends Omit<IUserProgressEvent, '_id' | 'userId'>, Document {
   userId: Schema.Types.ObjectId;

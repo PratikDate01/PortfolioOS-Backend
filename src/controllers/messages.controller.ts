@@ -15,7 +15,7 @@ export const getMessages = async (req: AuthenticatedRequest, res: Response): Pro
     }
 
     const filter: Record<string, any> = {};
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.portfolioOwnerId = ownerId;
     }
 
@@ -23,8 +23,28 @@ export const getMessages = async (req: AuthenticatedRequest, res: Response): Pro
       filter.status = status;
     }
 
-    const messages = await MessageModel.find(filter).sort({ createdAt: -1 });
-    res.status(200).json({ data: messages });
+    const page = parseInt(req.query.page as string, 10);
+    const limit = parseInt(req.query.limit as string, 10);
+
+    const messagesQuery = MessageModel.find(filter).sort({ createdAt: -1 });
+
+    if (page && limit) {
+      const skip = (page - 1) * limit;
+      const total = await MessageModel.countDocuments(filter);
+      const messages = await messagesQuery.skip(skip).limit(limit);
+      res.status(200).json({
+        data: messages,
+        pagination: {
+          total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } else {
+      const messages = await messagesQuery;
+      res.status(200).json({ data: messages });
+    }
   } catch (error) {
     res.status(500).json({ error: 'Server error listing messages' });
   }
@@ -73,7 +93,7 @@ export const updateMessageStatus = async (req: AuthenticatedRequest, res: Respon
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.portfolioOwnerId = ownerId;
     }
 

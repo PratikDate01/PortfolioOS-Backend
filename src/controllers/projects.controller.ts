@@ -53,8 +53,28 @@ export const getProjects = async (req: AuthenticatedRequest, res: Response): Pro
       filter.$text = { $search: search as string };
     }
 
-    const projects = await ProjectModel.find(filter).sort({ order: 1, createdAt: -1 });
-    res.status(200).json({ data: projects });
+    const page = parseInt(req.query.page as string, 10);
+    const limit = parseInt(req.query.limit as string, 10);
+
+    const projectsQuery = ProjectModel.find(filter).sort({ order: 1, createdAt: -1 });
+
+    if (page && limit) {
+      const skip = (page - 1) * limit;
+      const total = await ProjectModel.countDocuments(filter);
+      const projects = await projectsQuery.skip(skip).limit(limit);
+      res.status(200).json({
+        data: projects,
+        pagination: {
+          total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } else {
+      const projects = await projectsQuery;
+      res.status(200).json({ data: projects });
+    }
   } catch (error) {
     res.status(500).json({ error: 'Server error listing projects' });
   }
@@ -168,7 +188,7 @@ export const updateProject = async (req: AuthenticatedRequest, res: Response): P
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.ownerId = ownerId;
     }
 
@@ -196,7 +216,7 @@ export const deleteProject = async (req: AuthenticatedRequest, res: Response): P
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.ownerId = ownerId;
     }
 

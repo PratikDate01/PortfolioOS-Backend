@@ -1,5 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
-import { UploadRecord as IUploadRecord } from '@portfolio-os/types';
+import { UploadRecord as IUploadRecord } from '../types';
 
 export interface UploadRecordDocument extends Omit<IUploadRecord, '_id' | 'ownerId'>, Document {
   ownerId: Schema.Types.ObjectId;

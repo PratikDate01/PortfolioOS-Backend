@@ -6,6 +6,8 @@ import { ProjectModel } from '../models/project.model';
 import { SkillModel } from '../models/skill.model';
 import { ExperienceModel } from '../models/experience.model';
 import { CertificationModel } from '../models/certification.model';
+import { safeParseJson } from '../utils/json';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
 // In-memory session storage (message history per session)
 const sessions = new Map<string, { role: string; content: string }[]>();
@@ -128,7 +130,7 @@ function getLocalFallbackResponse(
   return `I'd love to chat more about ${name}'s skills and background! However, the AI assistant is currently experiencing high request volumes. Please browse the sections of the page or contact ${name} directly.`;
 }
 
-export const chatWithAI = async (req: Request, res: Response) => {
+export const chatWithAI = async (req: AuthenticatedRequest, res: Response) => {
   let sid = sessionIdFromReq(req);
   let history: { role: string; content: string }[] | undefined;
   
@@ -162,7 +164,17 @@ export const chatWithAI = async (req: Request, res: Response) => {
     }
 
     const ownerId = targetUser._id;
-    const portfolio = await PortfolioModel.findOne({ ownerId }) || {};
+    const portfolio = await PortfolioModel.findOne({ ownerId });
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio context not found' });
+    }
+
+    // Access protection check
+    const isOwner = req.user?.id && req.user.id.toString() === ownerId.toString();
+    if (portfolio.visibility !== 'public' && !isOwner) {
+      return res.status(403).json({ error: 'Access denied. This portfolio is not public.' });
+    }
+
     const projects = await ProjectModel.find({ ownerId, status: 'published' });
     const skills = await SkillModel.find({ ownerId });
     const experiences = await ExperienceModel.find({ ownerId });
@@ -251,9 +263,8 @@ export const parseResume = async (req: Request, res: Response) => {
 
     const result = await model.generateContent(prompt);
     const text = result.response.text();
-    const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-
-    res.json({ data: JSON.parse(cleanJson) });
+    const fallback = { skills: [], experience: [], education: [] };
+    res.json({ data: safeParseJson(text, fallback) });
   } catch (error) {
     res.status(500).json({ error: 'Failed to parse resume with AI' });
   }
@@ -352,8 +363,8 @@ export const extractSkills = async (req: Request, res: Response) => {
     ${text}`;
 
     const result = await model.generateContent(prompt);
-    const cleanJson = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    res.json({ data: JSON.parse(cleanJson) });
+    const rawText = result.response.text();
+    res.json({ data: safeParseJson<string[]>(rawText, []) });
   } catch (error) {
     res.status(500).json({ error: 'Failed to extract skills with AI' });
   }
@@ -416,8 +427,9 @@ export const optimizeSeo = async (req: Request, res: Response) => {
     Return ONLY a JSON object containing keys "title" and "description".`;
 
     const result = await model.generateContent(prompt);
-    const cleanJson = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    res.json({ data: JSON.parse(cleanJson) });
+    const rawText = result.response.text();
+    const fallback = { title: `${name} | ${role}`, description: bio || '' };
+    res.json({ data: safeParseJson(rawText, fallback) });
   } catch (error) {
     res.status(500).json({ error: 'Failed to optimize SEO tags' });
   }
@@ -517,8 +529,14 @@ export const generatePortfolioTemplate = async (req: Request, res: Response) => 
     No markdown formatting blocks.`;
 
     const result = await model.generateContent(prompt);
-    const cleanJson = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    res.json({ data: JSON.parse(cleanJson) });
+    const rawText = result.response.text();
+    const fallback = {
+      headline: `${role} at PortfolioOS`,
+      bio: `I am ${name}, working as a ${role}.`,
+      suggestedProjects: [],
+      suggestedSkills: []
+    };
+    res.json({ data: safeParseJson(rawText, fallback) });
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate portfolio template' });
   }

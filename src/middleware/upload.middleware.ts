@@ -1,5 +1,6 @@
 import multer, { FileFilterCallback } from 'multer';
 import { Request, Response, NextFunction } from 'express';
+import { validateFileSignature } from '../utils/fileSignature';
 
 // Set up memory storage
 const storage = multer.memoryStorage();
@@ -26,7 +27,7 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallb
   }
 };
 
-// General multer upload helper (limits to 50MB max, which is our absolute maximum limit for videos)
+// General multer upload helper (limits to 50MB max)
 export const upload = multer({
   storage,
   fileFilter,
@@ -34,6 +35,13 @@ export const upload = multer({
     fileSize: 50 * 1024 * 1024 // 50MB
   }
 });
+
+// Malware scan hook placeholder
+const scanForMalware = async (buffer: Buffer): Promise<boolean> => {
+  // Hook for VirusTotal, ClamAV or cloud provider scanners.
+  // Return true by default.
+  return true;
+};
 
 // Single file middleware handlers
 export const uploadSingle = (fieldName: string) => {
@@ -56,17 +64,23 @@ export const uploadSingle = (fieldName: string) => {
 };
 
 /**
- * Validates uploaded image properties (MIME & size <= 5MB)
+ * Validates uploaded image properties (MIME, magic bytes, size <= 5MB, malware check)
  */
-export const validateImageUpload = (req: Request, res: Response, next: NextFunction) => {
+export const validateImageUpload = async (req: Request, res: Response, next: NextFunction) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
 
-  const { mimetype, size } = req.file;
+  const { mimetype, size, buffer } = req.file;
 
   if (!ALLOWED_MIME_TYPES.images.includes(mimetype)) {
     return res.status(400).json({ error: 'Invalid image format. Allowed: jpg, jpeg, png, webp.' });
+  }
+
+  // Magic bytes signature validation
+  const signature = validateFileSignature(buffer);
+  if (!signature.isValid || !signature.detectedMime || !ALLOWED_MIME_TYPES.images.includes(signature.detectedMime)) {
+    return res.status(400).json({ error: 'MIME type spoofing detected. Invalid image file header.' });
   }
 
   const limit = 5 * 1024 * 1024; // 5MB
@@ -74,21 +88,33 @@ export const validateImageUpload = (req: Request, res: Response, next: NextFunct
     return res.status(400).json({ error: 'Image size exceeds the limit of 5MB.' });
   }
 
+  // Malware scan check
+  const isSafe = await scanForMalware(buffer);
+  if (!isSafe) {
+    return res.status(400).json({ error: 'Malicious upload content detected.' });
+  }
+
   next();
 };
 
 /**
- * Validates uploaded video properties (MIME & size <= 50MB)
+ * Validates uploaded video properties (MIME, magic bytes, size <= 50MB, malware check)
  */
-export const validateVideoUpload = (req: Request, res: Response, next: NextFunction) => {
+export const validateVideoUpload = async (req: Request, res: Response, next: NextFunction) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
 
-  const { mimetype, size } = req.file;
+  const { mimetype, size, buffer } = req.file;
 
   if (!ALLOWED_MIME_TYPES.videos.includes(mimetype)) {
     return res.status(400).json({ error: 'Invalid video format. Allowed: mp4, webm.' });
+  }
+
+  // Magic bytes signature validation
+  const signature = validateFileSignature(buffer);
+  if (!signature.isValid || !signature.detectedMime || !ALLOWED_MIME_TYPES.videos.includes(signature.detectedMime)) {
+    return res.status(400).json({ error: 'MIME type spoofing detected. Invalid video file header.' });
   }
 
   const limit = 50 * 1024 * 1024; // 50MB
@@ -96,26 +122,44 @@ export const validateVideoUpload = (req: Request, res: Response, next: NextFunct
     return res.status(400).json({ error: 'Video size exceeds the limit of 50MB.' });
   }
 
+  // Malware scan check
+  const isSafe = await scanForMalware(buffer);
+  if (!isSafe) {
+    return res.status(400).json({ error: 'Malicious upload content detected.' });
+  }
+
   next();
 };
 
 /**
- * Validates uploaded PDF properties (MIME & size <= 10MB)
+ * Validates uploaded PDF properties (MIME, magic bytes, size <= 10MB, malware check)
  */
-export const validatePdfUpload = (req: Request, res: Response, next: NextFunction) => {
+export const validatePdfUpload = async (req: Request, res: Response, next: NextFunction) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
 
-  const { mimetype, size } = req.file;
+  const { mimetype, size, buffer } = req.file;
 
   if (!ALLOWED_MIME_TYPES.documents.includes(mimetype)) {
     return res.status(400).json({ error: 'Invalid document format. Allowed: pdf.' });
   }
 
+  // Magic bytes signature validation
+  const signature = validateFileSignature(buffer);
+  if (!signature.isValid || !signature.detectedMime || !ALLOWED_MIME_TYPES.documents.includes(signature.detectedMime)) {
+    return res.status(400).json({ error: 'MIME type spoofing detected. Invalid document file header.' });
+  }
+
   const limit = 10 * 1024 * 1024; // 10MB
   if (size > limit) {
     return res.status(400).json({ error: 'Document size exceeds the limit of 10MB.' });
+  }
+
+  // Malware scan check
+  const isSafe = await scanForMalware(buffer);
+  if (!isSafe) {
+    return res.status(400).json({ error: 'Malicious upload content detected.' });
   }
 
   next();

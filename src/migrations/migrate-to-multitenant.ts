@@ -32,7 +32,7 @@ import { TestimonialModel } from '../models/testimonial.model';
 import { PortfolioModel } from '../models/portfolio.model';
 import { SubscriptionModel, createDefaultSubscription } from '../models/subscription.model';
 import { UploadRecordModel } from '../models/upload.model';
-import { SUBSCRIPTION_PLAN_LIMITS } from '@portfolio-os/types';
+import { SUBSCRIPTION_PLAN_LIMITS } from '../types';
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const log: string[] = [];

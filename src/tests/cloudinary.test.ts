@@ -1,10 +1,13 @@
+process.env.JWT_SECRET = 'test-jwt-secret-key-that-is-secure-and-long-enough-32-chars';
+process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-key-that-is-secure-and-long-enough-32-chars';
+
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../app';
 import { UploadRecordModel } from '../models/upload.model';
 import * as cloudinaryService from '../services/cloudinaryService';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-portfolio-os-secret-key-12345';
+const JWT_SECRET = process.env.JWT_SECRET as string;
 
 // Mock database model
 jest.mock('../models/upload.model', () => {
@@ -94,7 +97,7 @@ describe('Cloudinary Media Upload Integration Tests', () => {
         .attach('file', Buffer.from('small-image-content'), 'profile.png');
 
       expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error', 'Not authorized, token required');
+      expect(response.body).toHaveProperty('error', 'Not authorized, no token provided');
     });
 
     it('should reject upload calls for non-owner and non-admin users', async () => {
@@ -106,16 +109,17 @@ describe('Cloudinary Media Upload Integration Tests', () => {
         .attach('file', Buffer.from('small-image-content'), 'profile.png');
 
       expect(response.status).toBe(403);
-      expect(response.body).toHaveProperty('error', 'Forbidden, required role not met');
+      expect(response.body).toHaveProperty('error', 'You do not have permission to perform this action');
     });
   });
 
   describe('Profile Image Upload Validation (5MB Limit)', () => {
     it('should successfully upload a valid small PNG image', async () => {
+      const pngHeader = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x00]);
       const response = await request(app)
         .post('/api/v1/upload/profile')
         .set('Authorization', `Bearer ${token}`)
-        .attach('file', Buffer.from('small-image-content'), 'profile.png');
+        .attach('file', pngHeader, 'profile.png');
 
       expect(response.status).toBe(201);
       expect(response.body.data).toHaveProperty('publicId', 'portfolio-os/profiles/abc');
@@ -134,8 +138,10 @@ describe('Cloudinary Media Upload Integration Tests', () => {
     });
 
     it('should reject an image that exceeds the 5MB size limit', async () => {
-      // Create a 6MB dummy buffer
+      // Create a 6MB dummy buffer with valid PNG magic bytes
       const largeBuffer = Buffer.alloc(6 * 1024 * 1024);
+      largeBuffer.writeUInt32BE(0x89504E47, 0);
+      largeBuffer.writeUInt32BE(0x0D0A1A0A, 4);
       
       const response = await request(app)
         .post('/api/v1/upload/profile')
@@ -149,10 +155,11 @@ describe('Cloudinary Media Upload Integration Tests', () => {
 
   describe('Project Video Upload Validation (50MB Limit)', () => {
     it('should successfully upload a valid small MP4 video', async () => {
+      const mp4Header = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x00, 0x00, 0x00, 0x00]);
       const response = await request(app)
         .post('/api/v1/upload/project-video')
         .set('Authorization', `Bearer ${token}`)
-        .attach('file', Buffer.from('small-video-content'), 'demo.mp4');
+        .attach('file', mp4Header, 'demo.mp4');
 
       expect(response.status).toBe(201);
       expect(response.body.data).toHaveProperty('resourceType', 'video');
@@ -160,8 +167,10 @@ describe('Cloudinary Media Upload Integration Tests', () => {
     });
 
     it('should reject a video that exceeds the 50MB size limit', async () => {
-      // Create a 51MB dummy buffer
+      // Create a 51MB dummy buffer with valid MP4 magic bytes
       const largeBuffer = Buffer.alloc(51 * 1024 * 1024);
+      largeBuffer.writeUInt32BE(0x00000018, 0);
+      largeBuffer.writeUInt32BE(0x66747970, 4);
       
       const response = await request(app)
         .post('/api/v1/upload/project-video')
@@ -186,8 +195,9 @@ describe('Cloudinary Media Upload Integration Tests', () => {
     });
 
     it('should reject a PDF that exceeds the 10MB size limit', async () => {
-      // Create an 11MB dummy buffer
+      // Create an 11MB dummy buffer with valid PDF magic bytes
       const largeBuffer = Buffer.alloc(11 * 1024 * 1024);
+      largeBuffer.writeUInt32BE(0x25504446, 0);
       
       const response = await request(app)
         .post('/api/v1/upload/resume')

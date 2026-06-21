@@ -92,7 +92,7 @@ export const updateTestimonialStatus = async (req: AuthenticatedRequest, res: Re
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.portfolioOwnerId = ownerId;
     }
 
@@ -125,7 +125,7 @@ export const updateTestimonial = async (req: AuthenticatedRequest, res: Response
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.portfolioOwnerId = ownerId;
     }
 
@@ -156,7 +156,7 @@ export const deleteTestimonial = async (req: AuthenticatedRequest, res: Response
     }
 
     const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin' && req.user?.role !== 'admin') {
+    if (req.user?.role !== 'superadmin') {
       filter.portfolioOwnerId = ownerId;
     }
 

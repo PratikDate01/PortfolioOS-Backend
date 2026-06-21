@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, getMe, guestLogin, handleOAuthCallback } from '../controllers/auth.controller';
+import { register, login, getMe, guestLogin, handleOAuthCallback, refresh, logout } from '../controllers/auth.controller';
 import { protect } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { registerSchema, loginSchema } from '../middleware/schemas';
@@ -11,6 +11,8 @@ const router = Router();
 router.post('/register', validate(registerSchema), register);
 router.post('/login', validate(loginSchema), login);
 router.post('/guest', guestLogin);
+router.post('/refresh', refresh);
+router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 
 // ─── Check username availability ────────────────────────────────────────
