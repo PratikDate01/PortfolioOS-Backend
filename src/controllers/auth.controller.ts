@@ -26,10 +26,11 @@ const hashToken = (token: string): string => {
 };
 
 const setRefreshTokenCookie = (res: Response, token: string) => {
+  const isProd = process.env.NODE_ENV === 'production';
   res.cookie('refreshToken', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
 };
@@ -415,10 +416,11 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
       // Refresh token reuse/theft detected! Clear session in DB.
       user.refreshTokenHash = undefined;
       await user.save();
+      const isProd = process.env.NODE_ENV === 'production';
       res.clearCookie('refreshToken', {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
       });
       res.status(401).json({ error: 'Token reuse detected. Session terminated.' });
       return;
@@ -463,10 +465,11 @@ export const logout = async (req: AuthenticatedRequest, res: Response): Promise<
       }
     }
 
+    const isProd = process.env.NODE_ENV === 'production';
     res.clearCookie('refreshToken', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
     });
 
     res.status(200).json({ message: 'Logged out successfully' });
