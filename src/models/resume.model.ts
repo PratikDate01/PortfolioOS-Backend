@@ -11,7 +11,9 @@ const ResumeSchema = new Schema<ResumeDocument>(
     label: { type: String, required: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     resumeFile: { type: CloudinaryAssetSchema, required: true },
-    isActive: { type: Boolean, required: true, default: false }
+    isActive: { type: Boolean, required: true, default: false },
+    fileName: { type: String, required: true, default: 'Resume.pdf' },
+    mimeType: { type: String, required: true, default: 'application/pdf' }
   },
   { timestamps: true }
 );

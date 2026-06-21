@@ -61,7 +61,9 @@ const handleUpload = async (
         bytes: result.bytes,
         width: result.width,
         height: result.height,
-        uploadedAt: result.uploadedAt
+        uploadedAt: result.uploadedAt,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype
       }
     });
   } catch (error: any) {

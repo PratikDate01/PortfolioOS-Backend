@@ -20,7 +20,7 @@ export const getPortfolioByUsername = async (req: Request, res: Response): Promi
     
     const portfolio = await PortfolioModel.findOne({ 
       username: username.toLowerCase().trim() 
-    }).populate('ownerId', 'name email avatarUrl bio socialLinks githubUsername');
+    }).populate('ownerId', 'name email avatarUrl profileImage bio socialLinks githubUsername');
 
     if (!portfolio) {
       res.status(404).json({ error: 'Portfolio not found' });

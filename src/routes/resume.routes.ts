@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getResumes, createResume, updateResume, deleteResume, setActiveResume } from '../controllers/resume.controller';
+import { getResumes, createResume, updateResume, deleteResume, setActiveResume, downloadResume } from '../controllers/resume.controller';
 import { protect, restrictTo, optionalProtect } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { resumeSchema } from '../middleware/schemas';
@@ -8,6 +8,9 @@ const router = Router();
 
 // Public listing (only active) or Admin listing (all)
 router.get('/', optionalProtect, getResumes);
+
+// Public stream download
+router.get('/:id/download', downloadResume);
 
 // Owner/Admin operations
 router.post('/', protect, restrictTo('owner', 'admin'), validate(resumeSchema), createResume);

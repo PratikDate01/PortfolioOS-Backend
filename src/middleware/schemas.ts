@@ -181,6 +181,8 @@ export const resumeSchema = z.object({
     label: z.string().min(1, 'Label is required'),
     resumeFile: cloudinaryAssetSchema,
     isActive: z.boolean().default(false),
+    fileName: z.string().optional(),
+    mimeType: z.string().optional(),
   }),
 });
 

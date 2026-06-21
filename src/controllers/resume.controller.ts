@@ -47,7 +47,7 @@ export const getResumes = async (req: AuthenticatedRequest, res: Response): Prom
 
 export const createResume = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { label, resumeFile, isActive } = req.body;
+    const { label, resumeFile, isActive, fileName, mimeType } = req.body;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -64,7 +64,9 @@ export const createResume = async (req: AuthenticatedRequest, res: Response): Pr
       label,
       resumeFile,
       isActive,
-      userId
+      userId,
+      fileName: fileName || (resumeFile as any).originalName || 'Resume.pdf',
+      mimeType: mimeType || (resumeFile as any).mimeType || 'application/pdf'
     });
 
     await resume.save();
@@ -77,7 +79,7 @@ export const createResume = async (req: AuthenticatedRequest, res: Response): Pr
 export const updateResume = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { label, resumeFile, isActive } = req.body;
+    const { label, resumeFile, isActive, fileName, mimeType } = req.body;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -97,7 +99,14 @@ export const updateResume = async (req: AuthenticatedRequest, res: Response): Pr
     }
 
     if (label !== undefined) resume.label = label;
-    if (resumeFile !== undefined) resume.resumeFile = resumeFile;
+    if (resumeFile !== undefined) {
+      resume.resumeFile = resumeFile;
+      resume.fileName = fileName || (resumeFile as any).originalName || resume.fileName || 'Resume.pdf';
+      resume.mimeType = mimeType || (resumeFile as any).mimeType || resume.mimeType || 'application/pdf';
+    } else {
+      if (fileName !== undefined) resume.fileName = fileName;
+      if (mimeType !== undefined) resume.mimeType = mimeType;
+    }
     
     if (isActive === true) {
       // Deactivate all others for this user
@@ -172,5 +181,44 @@ export const setActiveResume = async (req: AuthenticatedRequest, res: Response):
     res.status(200).json({ data: resume, message: 'Resume activated successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server error activating resume' });
+  }
+};
+
+/**
+ * Stream download the resume PDF file with correct content headers.
+ */
+export const downloadResume = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const resume = await ResumeModel.findById(id).populate('userId');
+    if (!resume) {
+      res.status(404).json({ error: 'Resume not found' });
+      return;
+    }
+
+    const fileUrl = resume.resumeFile.secureUrl;
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      res.status(response.status).json({ error: 'Failed to download file from storage' });
+      return;
+    }
+
+    const contentType = resume.mimeType || response.headers.get('content-type') || 'application/pdf';
+    res.setHeader('Content-Type', contentType);
+
+    // Dynamic sanitized name fallback
+    let formattedName = resume.fileName;
+    if (!formattedName) {
+      const name = (resume.userId as any)?.name || 'Pratik_Date';
+      formattedName = `${name.trim().replace(/\s+/g, '_')}_Resume.pdf`;
+    }
+
+    res.setHeader('Content-Disposition', `attachment; filename="${formattedName}"`);
+    
+    const arrayBuffer = await response.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ error: 'Server error downloading resume' });
   }
 };

@@ -145,7 +145,7 @@ router.post('/me/bookmarks', protect, async (req: AuthenticatedRequest, res: Res
 router.patch('/me/profile', protect, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { name, bio, socialLinks } = req.body;
+    const { name, bio, socialLinks, profileImage, avatarUrl, coverImage } = req.body;
 
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       res.status(401).json({ error: 'Not authorized' });
@@ -160,6 +160,9 @@ router.patch('/me/profile', protect, async (req: AuthenticatedRequest, res: Resp
 
     if (name) user.name = name;
     if (bio !== undefined) user.bio = bio;
+    if (profileImage !== undefined) user.profileImage = profileImage;
+    if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+    if (coverImage !== undefined) user.coverImage = coverImage;
     if (socialLinks) {
       user.socialLinks = {
         github: socialLinks.github,

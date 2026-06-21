@@ -75,6 +75,7 @@ export interface Portfolio {
   analyticsSettings?: {
     enabled: boolean;
   };
+  showProfilePhoto?: boolean;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }
@@ -284,6 +285,8 @@ export interface Resume {
   userId: string;
   resumeFile: CloudinaryAsset;
   isActive: boolean;
+  fileName?: string;
+  mimeType?: string;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }
