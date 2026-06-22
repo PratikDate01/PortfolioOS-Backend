@@ -22,6 +22,9 @@ import portfolioRoutes from './routes/portfolio.routes';
 
 const app = express();
 
+// Trust reverse proxy (e.g., Render) to correctly identify protocol (HTTP vs HTTPS)
+app.set('trust proxy', 1);
+
 // Security Middleware
 app.use(helmet());
 app.use(cookieParser);
