@@ -117,7 +117,7 @@ const seed = async () => {
       slug: regularUser.username,
       headline: 'Developer & Tech Enthusiast',
       bio: regularUser.bio,
-      theme: 'minimal',
+      theme: 'nordic-frost',
       visibility: 'public',
       analyticsSettings: { enabled: true },
     });
