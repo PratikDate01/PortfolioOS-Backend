@@ -110,18 +110,13 @@ export const logEvent = async (req: AuthenticatedRequest, res: Response) => {
       }
     }
 
-    // If still not provided, fallback to logged-in user or superadmin
+    // If still not provided, fallback to logged-in user
     if (!portfolioOwnerId) {
       if (req.user?.id) {
         portfolioOwnerId = req.user.id;
       } else {
-        const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
-        if (primaryOwner) {
-          portfolioOwnerId = primaryOwner._id;
-        } else {
-          res.status(400).json({ error: 'portfolioOwnerId or username is required' });
-          return;
-        }
+        res.status(400).json({ error: 'portfolioOwnerId or username is required' });
+        return;
       }
     }
 
@@ -163,6 +158,8 @@ export const getAnalyticsSummary = async (req: AuthenticatedRequest, res: Respon
       if (user) {
         filter.portfolioOwnerId = user._id;
       }
+    } else {
+      filter.portfolioOwnerId = new mongoose.Types.ObjectId(ownerId);
     }
 
     const portfolioOwnerId = filter.portfolioOwnerId;

@@ -19,14 +19,8 @@ export const getCertifications = async (req: AuthenticatedRequest, res: Response
     } else if (req.user?.id) {
       filter.ownerId = req.user.id;
     } else {
-      // Public fallback: retrieve primary superadmin's certifications
-      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
-      if (primaryOwner) {
-        filter.ownerId = primaryOwner._id;
-      } else {
-        res.status(200).json({ data: [] });
-        return;
-      }
+      res.status(400).json({ error: 'username query parameter is required for public requests' });
+      return;
     }
 
     if (category) {
@@ -93,22 +87,22 @@ export const updateCertification = async (req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.ownerId = ownerId;
-    }
-
-    const certification = await CertificationModel.findOneAndUpdate(filter, certData, {
-      new: true,
-      runValidators: true,
-    });
-
+    const certification = await CertificationModel.findById(id);
     if (!certification) {
       res.status(404).json({ error: 'Certification not found' });
       return;
     }
 
-    res.status(200).json({ data: certification });
+    if (certification.ownerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to edit this certification' });
+      return;
+    }
+
+    const updated = await CertificationModel.findByIdAndUpdate(id, certData, {
+      new: true,
+      runValidators: true,
+    });
+    res.status(200).json({ data: updated });
   } catch (error) {
     res.status(500).json({ error: 'Server error updating certification' });
   }
@@ -124,17 +118,18 @@ export const deleteCertification = async (req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.ownerId = ownerId;
-    }
-
-    const certification = await CertificationModel.findOneAndDelete(filter);
-
+    const certification = await CertificationModel.findById(id);
     if (!certification) {
       res.status(404).json({ error: 'Certification not found' });
       return;
     }
+
+    if (certification.ownerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to delete this certification' });
+      return;
+    }
+
+    await CertificationModel.findByIdAndDelete(id);
 
     res.status(200).json({ data: certification, message: 'Certification deleted successfully' });
   } catch (error) {

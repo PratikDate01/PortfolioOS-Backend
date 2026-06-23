@@ -19,14 +19,8 @@ export const getExperiences = async (req: AuthenticatedRequest, res: Response): 
     } else if (req.user?.id) {
       filter.ownerId = req.user.id;
     } else {
-      // Public fallback: retrieve primary superadmin's experiences
-      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
-      if (primaryOwner) {
-        filter.ownerId = primaryOwner._id;
-      } else {
-        res.status(200).json({ data: [] });
-        return;
-      }
+      res.status(400).json({ error: 'username query parameter is required for public requests' });
+      return;
     }
 
     if (type) {
@@ -70,18 +64,19 @@ export const updateExperience = async (req: AuthenticatedRequest, res: Response)
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.ownerId = ownerId;
-    }
-
-    const exp = await ExperienceModel.findOneAndUpdate(filter, req.body, { new: true, runValidators: true });
-    
+    const exp = await ExperienceModel.findById(id);
     if (!exp) {
       res.status(404).json({ error: 'Experience not found' });
       return;
     }
-    res.status(200).json({ data: exp });
+
+    if (exp.ownerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to edit this resource' });
+      return;
+    }
+
+    const updated = await ExperienceModel.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    res.status(200).json({ data: updated });
   } catch (error) {
     res.status(500).json({ error: 'Server error updating experience' });
   }
@@ -97,19 +92,21 @@ export const deleteExperience = async (req: AuthenticatedRequest, res: Response)
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.ownerId = ownerId;
-    }
-
-    const exp = await ExperienceModel.findOneAndDelete(filter);
-    
+    const exp = await ExperienceModel.findById(id);
     if (!exp) {
       res.status(404).json({ error: 'Experience not found' });
       return;
     }
+
+    if (exp.ownerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to delete this resource' });
+      return;
+    }
+
+    await ExperienceModel.findByIdAndDelete(id);
     res.status(200).json({ data: exp, message: 'Experience deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server error deleting experience' });
   }
 };
+

@@ -23,14 +23,8 @@ export const getProjects = async (req: AuthenticatedRequest, res: Response): Pro
       // If logged in and no username query, view own content
       filter.ownerId = req.user.id;
     } else {
-      // Public fallback: retrieve primary superadmin's projects
-      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
-      if (primaryOwner) {
-        filter.ownerId = primaryOwner._id;
-      } else {
-        res.status(200).json({ data: [] });
-        return;
-      }
+      res.status(400).json({ error: 'username query parameter is required for public requests' });
+      return;
     }
 
     // Restrict guest/member/public users to only see published projects
@@ -96,13 +90,8 @@ export const getProjectBySlug = async (req: AuthenticatedRequest, res: Response)
     } else if (req.user?.id) {
       filter.ownerId = req.user.id;
     } else {
-      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
-      if (primaryOwner) {
-        filter.ownerId = primaryOwner._id;
-      } else {
-        res.status(404).json({ error: 'Project not found' });
-        return;
-      }
+      res.status(400).json({ error: 'username query parameter is required for public requests' });
+      return;
     }
 
     const project = await ProjectModel.findOne(filter);
@@ -187,19 +176,19 @@ export const updateProject = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.ownerId = ownerId;
-    }
-
-    const project = await ProjectModel.findOneAndUpdate(filter, updateData, { new: true, runValidators: true });
-    
+    const project = await ProjectModel.findById(id);
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
       return;
     }
 
-    res.status(200).json({ data: project });
+    if (project.ownerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to edit this project' });
+      return;
+    }
+
+    const updated = await ProjectModel.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    res.status(200).json({ data: updated });
   } catch (error) {
     res.status(500).json({ error: 'Server error updating project' });
   }
@@ -215,23 +204,19 @@ export const deleteProject = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.ownerId = ownerId;
-    }
-
-    // Soft delete as per spec: status -> archived
-    const project = await ProjectModel.findOneAndUpdate(
-      filter,
-      { status: 'archived' },
-      { new: true }
-    );
-
+    const project = await ProjectModel.findById(id);
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
       return;
     }
 
+    if (project.ownerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to delete this project' });
+      return;
+    }
+
+    project.status = 'archived';
+    await project.save();
     res.status(200).json({ data: project, message: 'Project archived successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server error deleting project' });

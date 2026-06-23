@@ -6,18 +6,13 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware';
 export const getResumes = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { username } = req.query;
-    const userRole = req.user?.role;
     const isDashboardAccess = !username && req.user?.id;
 
-    if (isDashboardAccess && (userRole === 'superadmin' || userRole === 'admin' || userRole === 'user')) {
-      const filter: Record<string, any> = {};
-      if (userRole !== 'superadmin') {
-        filter.userId = req.user?.id;
-      }
-      const resumes = await ResumeModel.find(filter).sort({ createdAt: -1 });
+    if (isDashboardAccess) {
+      const resumes = await ResumeModel.find({ userId: req.user?.id }).sort({ createdAt: -1 });
       res.status(200).json({ data: resumes });
     } else {
-      // Public view gets the active resume for specified username or fallback superadmin
+      // Public view gets the active resume for specified username
       const filter: Record<string, any> = { isActive: true };
       
       if (username) {
@@ -28,13 +23,8 @@ export const getResumes = async (req: AuthenticatedRequest, res: Response): Prom
         }
         filter.userId = user._id;
       } else {
-        const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
-        if (primaryOwner) {
-          filter.userId = primaryOwner._id;
-        } else {
-          res.status(200).json({ data: [] });
-          return;
-        }
+        res.status(400).json({ error: 'username query parameter is required for public requests' });
+        return;
       }
 
       const activeResume = await ResumeModel.findOne(filter);
@@ -87,14 +77,14 @@ export const updateResume = async (req: AuthenticatedRequest, res: Response): Pr
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.userId = userId;
-    }
-
-    const resume = await ResumeModel.findOne(filter);
+    const resume = await ResumeModel.findById(id);
     if (!resume) {
       res.status(404).json({ error: 'Resume not found' });
+      return;
+    }
+
+    if (resume.userId.toString() !== userId) {
+      res.status(403).json({ error: 'Not authorized to edit this resume' });
       return;
     }
 
@@ -133,17 +123,18 @@ export const deleteResume = async (req: AuthenticatedRequest, res: Response): Pr
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.userId = userId;
-    }
-
-    const resume = await ResumeModel.findOneAndDelete(filter);
+    const resume = await ResumeModel.findById(id);
     if (!resume) {
       res.status(404).json({ error: 'Resume not found' });
       return;
     }
 
+    if (resume.userId.toString() !== userId) {
+      res.status(403).json({ error: 'Not authorized to delete this resume' });
+      return;
+    }
+
+    await ResumeModel.findByIdAndDelete(id);
     res.status(200).json({ data: resume, message: 'Resume deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server error deleting resume' });
@@ -160,14 +151,14 @@ export const setActiveResume = async (req: AuthenticatedRequest, res: Response):
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.userId = userId;
-    }
-
-    const resume = await ResumeModel.findOne(filter);
+    const resume = await ResumeModel.findById(id);
     if (!resume) {
       res.status(404).json({ error: 'Resume not found' });
+      return;
+    }
+
+    if (resume.userId.toString() !== userId) {
+      res.status(403).json({ error: 'Not authorized to activate this resume' });
       return;
     }
 
@@ -209,7 +200,7 @@ export const downloadResume = async (req: Request, res: Response): Promise<void>
     // Dynamic sanitized name fallback
     let formattedName = resume.fileName;
     if (!formattedName) {
-      const name = (resume.userId as any)?.name || 'Pratik_Date';
+      const name = (resume.userId as any)?.name || 'User';
       formattedName = `${name.trim().replace(/\s+/g, '_')}_Resume.pdf`;
     }
 

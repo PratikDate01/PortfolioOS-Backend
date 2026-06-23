@@ -19,14 +19,8 @@ export const getSkills = async (req: AuthenticatedRequest, res: Response): Promi
     } else if (req.user?.id) {
       filter.ownerId = req.user.id;
     } else {
-      // Public fallback: retrieve primary superadmin's skills
-      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
-      if (primaryOwner) {
-        filter.ownerId = primaryOwner._id;
-      } else {
-        res.status(200).json({ data: [] });
-        return;
-      }
+      res.status(400).json({ error: 'username query parameter is required for public requests' });
+      return;
     }
 
     if (category) {
@@ -77,18 +71,19 @@ export const updateSkill = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.ownerId = ownerId;
-    }
-
-    const skill = await SkillModel.findOneAndUpdate(filter, req.body, { new: true, runValidators: true });
-    
+    const skill = await SkillModel.findById(id);
     if (!skill) {
       res.status(404).json({ error: 'Skill not found' });
       return;
     }
-    res.status(200).json({ data: skill });
+
+    if (skill.ownerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to edit this resource' });
+      return;
+    }
+
+    const updated = await SkillModel.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    res.status(200).json({ data: updated });
   } catch (error) {
     res.status(500).json({ error: 'Server error updating skill' });
   }
@@ -104,17 +99,18 @@ export const deleteSkill = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.ownerId = ownerId;
-    }
-
-    const skill = await SkillModel.findOneAndDelete(filter);
-    
+    const skill = await SkillModel.findById(id);
     if (!skill) {
       res.status(404).json({ error: 'Skill not found' });
       return;
     }
+
+    if (skill.ownerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to delete this resource' });
+      return;
+    }
+
+    await SkillModel.findByIdAndDelete(id);
     res.status(200).json({ data: skill, message: 'Skill deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server error deleting skill' });

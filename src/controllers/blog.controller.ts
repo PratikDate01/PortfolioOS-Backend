@@ -26,14 +26,8 @@ export const getBlogPosts = async (req: AuthenticatedRequest, res: Response): Pr
     } else if (req.user?.id) {
       filter.ownerId = req.user.id;
     } else {
-      // Public fallback: retrieve primary superadmin's posts
-      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
-      if (primaryOwner) {
-        filter.ownerId = primaryOwner._id;
-      } else {
-        res.status(200).json({ data: [] });
-        return;
-      }
+      res.status(400).json({ error: 'username query parameter is required for public requests' });
+      return;
     }
 
     const userRole = req.user?.role;
@@ -96,13 +90,8 @@ export const getBlogPostBySlug = async (req: AuthenticatedRequest, res: Response
     } else if (req.user?.id) {
       filter.ownerId = req.user.id;
     } else {
-      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
-      if (primaryOwner) {
-        filter.ownerId = primaryOwner._id;
-      } else {
-        res.status(404).json({ error: 'Blog post not found' });
-        return;
-      }
+      res.status(400).json({ error: 'username query parameter is required for public requests' });
+      return;
     }
 
     const post = await BlogPostModel.findOne(filter).populate('authorId', 'name avatarUrl bio');
@@ -193,19 +182,19 @@ export const updateBlogPost = async (req: AuthenticatedRequest, res: Response): 
       }
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.ownerId = ownerId;
-    }
-
-    const post = await BlogPostModel.findOneAndUpdate(filter, updateData, { new: true, runValidators: true });
-    
+    const post = await BlogPostModel.findById(id);
     if (!post) {
       res.status(404).json({ error: 'Blog post not found' });
       return;
     }
 
-    res.status(200).json({ data: post });
+    if (post.ownerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to edit this blog post' });
+      return;
+    }
+
+    const updated = await BlogPostModel.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    res.status(200).json({ data: updated });
   } catch (error) {
     res.status(500).json({ error: 'Server error updating blog post' });
   }
@@ -221,17 +210,18 @@ export const deleteBlogPost = async (req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.ownerId = ownerId;
-    }
-
-    const post = await BlogPostModel.findOneAndDelete(filter);
-    
+    const post = await BlogPostModel.findById(id);
     if (!post) {
       res.status(404).json({ error: 'Blog post not found' });
       return;
     }
+
+    if (post.ownerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to delete this blog post' });
+      return;
+    }
+
+    await BlogPostModel.findByIdAndDelete(id);
 
     res.status(200).json({ data: post, message: 'Blog post deleted successfully' });
   } catch (error) {

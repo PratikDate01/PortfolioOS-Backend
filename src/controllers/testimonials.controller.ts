@@ -19,14 +19,8 @@ export const getTestimonials = async (req: AuthenticatedRequest, res: Response):
     } else if (req.user?.id) {
       filter.portfolioOwnerId = req.user.id;
     } else {
-      // Public fallback: retrieve primary superadmin's testimonials
-      const primaryOwner = await UserModel.findOne({ role: 'superadmin' });
-      if (primaryOwner) {
-        filter.portfolioOwnerId = primaryOwner._id;
-      } else {
-        res.status(200).json({ data: [] });
-        return;
-      }
+      res.status(400).json({ error: 'username query parameter is required for public requests' });
+      return;
     }
 
     const userRole = req.user?.role;
@@ -91,23 +85,23 @@ export const updateTestimonialStatus = async (req: AuthenticatedRequest, res: Re
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.portfolioOwnerId = ownerId;
-    }
-
-    const testimonial = await TestimonialModel.findOneAndUpdate(
-      filter,
-      { status },
-      { new: true, runValidators: true }
-    );
-
+    const testimonial = await TestimonialModel.findById(id);
     if (!testimonial) {
       res.status(404).json({ error: 'Testimonial not found' });
       return;
     }
 
-    res.status(200).json({ data: testimonial });
+    if (testimonial.portfolioOwnerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to edit this testimonial' });
+      return;
+    }
+
+    const updated = await TestimonialModel.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true, runValidators: true }
+    );
+    res.status(200).json({ data: updated });
   } catch (error) {
     res.status(500).json({ error: 'Server error updating testimonial status' });
   }
@@ -124,22 +118,22 @@ export const updateTestimonial = async (req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.portfolioOwnerId = ownerId;
-    }
-
-    const testimonial = await TestimonialModel.findOneAndUpdate(filter, testimonialData, {
-      new: true,
-      runValidators: true,
-    });
-
+    const testimonial = await TestimonialModel.findById(id);
     if (!testimonial) {
       res.status(404).json({ error: 'Testimonial not found' });
       return;
     }
 
-    res.status(200).json({ data: testimonial });
+    if (testimonial.portfolioOwnerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to edit this testimonial' });
+      return;
+    }
+
+    const updated = await TestimonialModel.findByIdAndUpdate(id, testimonialData, {
+      new: true,
+      runValidators: true,
+    });
+    res.status(200).json({ data: updated });
   } catch (error) {
     res.status(500).json({ error: 'Server error updating testimonial' });
   }
@@ -155,17 +149,18 @@ export const deleteTestimonial = async (req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.portfolioOwnerId = ownerId;
-    }
-
-    const testimonial = await TestimonialModel.findOneAndDelete(filter);
-
+    const testimonial = await TestimonialModel.findById(id);
     if (!testimonial) {
       res.status(404).json({ error: 'Testimonial not found' });
       return;
     }
+
+    if (testimonial.portfolioOwnerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to delete this testimonial' });
+      return;
+    }
+
+    await TestimonialModel.findByIdAndDelete(id);
 
     res.status(200).json({ data: testimonial, message: 'Testimonial deleted successfully' });
   } catch (error) {

@@ -154,10 +154,6 @@ export const chatWithAI = async (req: AuthenticatedRequest, res: Response) => {
     if (username) {
       targetUser = await UserModel.findOne({ username: String(username).toLowerCase().trim() });
     }
-    
-    if (!targetUser) {
-      targetUser = await UserModel.findOne({ role: 'superadmin' });
-    }
 
     if (!targetUser) {
       return res.status(404).json({ error: 'Tenant context not found' });

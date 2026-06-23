@@ -14,10 +14,7 @@ export const getMessages = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const filter: Record<string, any> = {};
-    if (req.user?.role !== 'superadmin') {
-      filter.portfolioOwnerId = ownerId;
-    }
+    const filter: Record<string, any> = { portfolioOwnerId: ownerId };
 
     if (status) {
       filter.status = status;
@@ -92,17 +89,19 @@ export const updateMessageStatus = async (req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    const filter: Record<string, any> = { _id: id };
-    if (req.user?.role !== 'superadmin') {
-      filter.portfolioOwnerId = ownerId;
-    }
-
-    const msg = await MessageModel.findOneAndUpdate(filter, { status }, { new: true, runValidators: true });
-    
+    const msg = await MessageModel.findById(id);
     if (!msg) {
       res.status(404).json({ error: 'Message not found' });
       return;
     }
+
+    if (msg.portfolioOwnerId.toString() !== ownerId) {
+      res.status(403).json({ error: 'Not authorized to edit this message' });
+      return;
+    }
+
+    msg.status = status;
+    await msg.save();
     res.status(200).json({ data: msg });
   } catch (error) {
     res.status(500).json({ error: 'Server error updating message status' });
