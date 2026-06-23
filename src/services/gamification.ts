@@ -55,10 +55,6 @@ export async function awardXp(
   metadata?: Record<string, any>
 ): Promise<{ xpAwarded: number; levelUp: boolean; unlockedBadges: string[] }> {
   try {
-    // Prevent XP logging for guests that don't have a real DB user (e.g. guest_xxxx)
-    if (userId.startsWith('guest_')) {
-      return { xpAwarded: 0, levelUp: false, unlockedBadges: [] };
-    }
 
     // 1. Fetch user
     const user = await UserModel.findById(userId);

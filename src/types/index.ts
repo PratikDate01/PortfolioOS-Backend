@@ -10,7 +10,7 @@ export interface CloudinaryAsset {
 }
 
 // ─── SaaS Role System ──────────────────────────────────────────────────
-export type SaaSRole = 'superadmin' | 'admin' | 'user' | 'guest';
+export type SaaSRole = 'superadmin' | 'admin' | 'user';
 
 // ─── Subscription Tiers ─────────────────────────────────────────────────
 export type SubscriptionTier = 'free' | 'pro' | 'premium' | 'enterprise';

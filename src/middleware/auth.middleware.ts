@@ -126,10 +126,7 @@ export const restrictTo = (...roles: string[]) => {
     if (roles.includes('user') && userRole === 'admin') {
       hasPermission = true;
     }
-    if (roles.includes('member') && (userRole === 'user' || userRole === 'admin')) {
-      hasPermission = true;
-    }
-    if (roles.includes('owner') && userRole === 'admin') {
+    if (roles.includes('owner') && (userRole === 'user' || userRole === 'admin')) {
       hasPermission = true;
     }
 

@@ -22,7 +22,7 @@ const UserSchema = new Schema<UserDocument>(
     coverImage: { type: CloudinaryAssetSchema },
     role: {
       type: String,
-      enum: ['superadmin', 'admin', 'user', 'guest'],
+      enum: ['superadmin', 'admin', 'user'],
       required: true,
       default: 'user'
     },

@@ -51,7 +51,7 @@ const seed = async () => {
     const passwordHash = await bcrypt.hash('password123', salt);
     
     const owner = new UserModel({
-      username: 'pratik-date',
+      username: 'pratik-satish-date',
       name: 'Pratik Satish Date',
       email: 'pratikdate.sknsits.it@gmail.com',
       passwordHash,

@@ -262,52 +262,6 @@ export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<v
   }
 };
 
-export const guestLogin = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const randomSuffix = Math.random().toString(36).substring(2, 6);
-    const guestUsername = `guest-${Date.now()}-${randomSuffix}`;
-    const email = `${guestUsername}@portfolio-guest.local`;
-
-    // Create a real Guest User in MongoDB so their progress, profile, and bookmarks are persistent and functional
-    const guestUser = new UserModel({
-      username: guestUsername,
-      name: 'Guest User',
-      email,
-      authProvider: 'local',
-      role: 'guest',
-      subscriptionTier: 'free',
-      isVerified: false
-    });
-
-    await guestUser.save();
-
-    // Provision minimal portfolio for guest
-    await provisionUserResources(guestUser._id, guestUsername, undefined);
-
-    const token = generateToken({
-      id: guestUser._id.toString(),
-      role: 'guest',
-      email: guestUser.email,
-      username: guestUser.username,
-    });
-    const refreshToken = generateRefreshToken({ id: guestUser._id.toString() });
-    guestUser.refreshTokenHash = hashToken(refreshToken);
-    await guestUser.save();
-
-    setRefreshTokenCookie(res, refreshToken);
-
-    res.status(200).json({
-      data: {
-        token,
-        user: sanitizeUser(guestUser),
-      },
-    });
-  } catch (error) {
-    console.error('Guest login error:', error);
-    res.status(500).json({ error: 'Server error during guest authentication' });
-  }
-};
-
 /**
  * Handle OAuth callback — find or create user, provision resources, redirect.
  * Used by both Google and GitHub OAuth routes.

@@ -100,12 +100,12 @@ describe('Cloudinary Media Upload Integration Tests', () => {
       expect(response.body).toHaveProperty('error', 'Not authorized, no token provided');
     });
 
-    it('should reject upload calls for non-owner and non-admin users', async () => {
-      const guestToken = jwt.sign({ id: 'test-guest-id', role: 'guest', email: 'guest@portfolio-os.local' }, JWT_SECRET);
+    it('should reject upload calls for users with invalid roles', async () => {
+      const invalidToken = jwt.sign({ id: 'test-invalid-id', role: 'invalid_role' as any, email: 'invalid@portfolio-os.local' }, JWT_SECRET);
       
       const response = await request(app)
         .post('/api/v1/upload/profile')
-        .set('Authorization', `Bearer ${guestToken}`)
+        .set('Authorization', `Bearer ${invalidToken}`)
         .attach('file', Buffer.from('small-image-content'), 'profile.png');
 
       expect(response.status).toBe(403);
