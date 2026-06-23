@@ -186,6 +186,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     res.status(201).json({
       data: {
         token,
+        refreshToken,
         user: sanitizeUser(user),
       },
     });
@@ -201,12 +202,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     const user = await UserModel.findOne({ email });
     if (!user || !user.passwordHash) {
+      console.warn(`[Login Auth Failure] User not found or missing password hash for email: ${email}`);
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
+      console.warn(`[Login Auth Failure] Incorrect password for user: ${email}`);
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
@@ -230,10 +233,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     res.status(200).json({
       data: {
         token,
+        refreshToken,
         user: sanitizeUser(user),
       },
     });
   } catch (error) {
+    console.error('Server error during login:', error);
     res.status(500).json({ error: 'Server error during login' });
   }
 };
@@ -327,7 +332,7 @@ export async function handleOAuthCallback(
 
     setRefreshTokenCookie(res, refreshToken);
 
-    res.redirect(`${frontendUrl}/login?token=${token}`);
+    res.redirect(`${frontendUrl}/login?token=${token}&refreshToken=${refreshToken}`);
   } catch (error) {
     console.error(`${provider} OAuth error:`, error);
     res.redirect(`${frontendUrl}/login?error=oauth_failed`);
@@ -336,9 +341,10 @@ export async function handleOAuthCallback(
 
 export const refresh = async (req: Request, res: Response): Promise<void> => {
   try {
-    const refreshToken = (req as any).cookies?.refreshToken;
+    const refreshToken = (req as any).cookies?.refreshToken || req.body?.refreshToken;
     if (!refreshToken) {
-      res.status(401).json({ error: 'Refresh token not found in cookies' });
+      console.warn('[Refresh Auth Failure] No refresh token found in cookies or request body.');
+      res.status(401).json({ error: 'Refresh token not found in cookies or request body' });
       return;
     }
 
@@ -346,12 +352,14 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
     try {
       decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
     } catch (err) {
+      console.warn('[Refresh Auth Failure] Invalid or expired refresh token signature:', err);
       res.status(401).json({ error: 'Invalid or expired refresh token' });
       return;
     }
 
     const user = await UserModel.findById(decoded.id);
     if (!user) {
+      console.warn(`[Refresh Auth Failure] User with ID ${decoded.id} not found in database.`);
       res.status(401).json({ error: 'User not found' });
       return;
     }
@@ -359,6 +367,7 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
     // Verify token hash
     const tokenHash = hashToken(refreshToken);
     if (!user.refreshTokenHash || user.refreshTokenHash !== tokenHash) {
+      console.warn(`[Refresh Auth Failure] Token hash mismatch for user ${user.email}. Possible theft/reuse or database discrepancy.`);
       // Refresh token reuse/theft detected! Clear session in DB.
       user.refreshTokenHash = undefined;
       await user.save();
@@ -391,6 +400,7 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
     res.status(200).json({
       data: {
         token: newAccessToken,
+        refreshToken: newRefreshToken,
         user: sanitizeUser(user),
       },
     });

@@ -3,6 +3,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export const validateEnv = (): void => {
+  // Normalize MONGO_URI to MONGODB_URI if needed
+  if (!process.env.MONGODB_URI && process.env.MONGO_URI) {
+    process.env.MONGODB_URI = process.env.MONGO_URI;
+  }
+
   const missingVars: string[] = [];
 
   const requiredVars = ['MONGODB_URI', 'JWT_SECRET', 'JWT_REFRESH_SECRET'];
