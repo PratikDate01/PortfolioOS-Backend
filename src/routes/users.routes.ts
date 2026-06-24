@@ -179,11 +179,10 @@ router.patch('/me/profile', protect, async (req: AuthenticatedRequest, res: Resp
   }
 });
 
-// POST /api/v1/users/me/password - change password
 router.post('/me/password', protect, validate(changePasswordSchema), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { currentPassword, newPassword } = req.body;
+    const { newPassword } = req.body;
 
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       res.status(401).json({ error: 'Not authorized' });
@@ -196,19 +195,8 @@ router.post('/me/password', protect, validate(changePasswordSchema), async (req:
       return;
     }
 
-    if (user.authProvider !== 'local') {
-      res.status(400).json({ error: 'Password change is only supported for accounts registered with email and password' });
-      return;
-    }
-
     if (!user.passwordHash) {
-      res.status(400).json({ error: 'User does not have a local password' });
-      return;
-    }
-
-    const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
-    if (!isMatch) {
-      res.status(400).json({ error: 'Incorrect current password' });
+      res.status(400).json({ error: 'Password change is only supported for accounts registered with email and password' });
       return;
     }
 
