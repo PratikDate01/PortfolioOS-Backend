@@ -51,7 +51,7 @@ const seed = async () => {
     const passwordHash = await bcrypt.hash('password123', salt);
     
     const owner = new UserModel({
-      username: 'pratik-satish-date',
+      username: 'pratik-date',
       name: 'Pratik Satish Date',
       email: 'pratikdate.sknsits.it@gmail.com',
       passwordHash,
@@ -79,7 +79,7 @@ const seed = async () => {
       bio: owner.bio,
       githubUsername: 'PratikDate01',
       socialLinks: owner.socialLinks,
-      theme: 'corporate',
+      theme: 'portfolio-os',
       visibility: 'public',
       seoSettings: {
         title: 'Pratik Date — Full Stack Developer Portfolio',

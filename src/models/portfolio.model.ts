@@ -26,7 +26,7 @@ const PortfolioSchema = new Schema<PortfolioDocument>(
       type: String,
       enum: ['corporate', 'portfolio-os', 'aurora-glass', 'nordic-frost'],
       required: true,
-      default: 'corporate'
+      default: 'portfolio-os'
     },
     visibility: {
       type: String,
