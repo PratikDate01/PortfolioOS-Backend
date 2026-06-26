@@ -79,7 +79,7 @@ const seed = async () => {
       bio: owner.bio,
       githubUsername: 'PratikDate01',
       socialLinks: owner.socialLinks,
-      theme: 'portfolio-os',
+      theme: 'corporate',
       visibility: 'public',
       seoSettings: {
         title: 'Pratik Date — Full Stack Developer Portfolio',
