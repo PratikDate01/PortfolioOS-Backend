@@ -15,7 +15,7 @@ export type SaaSRole = 'superadmin' | 'admin' | 'user';
 // ─── Subscription Tiers ─────────────────────────────────────────────────
 export type SubscriptionTier = 'free' | 'pro' | 'premium' | 'enterprise';
 
-export type PortfolioTheme = 'corporate' | 'portfolio-os' | 'aurora-glass' | 'nordic-frost';
+export type PortfolioTheme = 'portfolio-os';
 
 // ─── User ───────────────────────────────────────────────────────────────
 export interface User {
