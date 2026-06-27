@@ -15,7 +15,7 @@ export type SaaSRole = 'superadmin' | 'admin' | 'user';
 // ─── Subscription Tiers ─────────────────────────────────────────────────
 export type SubscriptionTier = 'free' | 'pro' | 'premium' | 'enterprise';
 
-export type PortfolioTheme = 'portfolio-os';
+export type PortfolioTheme = 'portfolio-os' | 'developer-pro' | 'executive' | 'creative' | 'terminal';
 
 // ─── User ───────────────────────────────────────────────────────────────
 export interface User {
@@ -65,6 +65,15 @@ export interface Portfolio {
     website?: string;
   };
   theme: PortfolioTheme;
+  defaultTheme?: string;
+  themeSettings?: {
+    lightDark?: 'light' | 'dark' | 'system';
+    backgroundEffects?: boolean;
+  };
+  accentColor?: string;
+  fontStyle?: string;
+  borderRadius?: string;
+  animationLevel?: string;
   visibility: 'public' | 'private' | 'unlisted';
   customDomain?: string;
   seoSettings?: {

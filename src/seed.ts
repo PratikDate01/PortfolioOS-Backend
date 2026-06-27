@@ -79,7 +79,7 @@ const seed = async () => {
       bio: owner.bio,
       githubUsername: 'PratikDate01',
       socialLinks: owner.socialLinks,
-      theme: 'portfolio-os',
+      theme: 'developer-pro',
       visibility: 'public',
       seoSettings: {
         title: 'Pratik Date — Full Stack Developer Portfolio',
@@ -117,7 +117,7 @@ const seed = async () => {
       slug: regularUser.username,
       headline: 'Developer & Tech Enthusiast',
       bio: regularUser.bio,
-      theme: 'portfolio-os',
+      theme: 'developer-pro',
       visibility: 'public',
       analyticsSettings: { enabled: true },
     });

@@ -79,7 +79,7 @@ async function provisionUserResources(userId: mongoose.Types.ObjectId, username:
     username,
     slug: username,
     bio,
-    theme: 'portfolio-os',
+    theme: 'developer-pro',
     visibility: 'public',
     analyticsSettings: { enabled: true },
   });

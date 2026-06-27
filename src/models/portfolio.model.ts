@@ -24,9 +24,21 @@ const PortfolioSchema = new Schema<PortfolioDocument>(
     },
     theme: {
       type: String,
-      enum: ['portfolio-os'],
+      enum: ['portfolio-os', 'developer-pro', 'executive', 'creative', 'terminal'],
       required: true,
-      default: 'portfolio-os'
+      default: 'developer-pro'
+    },
+    defaultTheme: {
+      type: String,
+      default: 'developer-pro'
+    },
+    accentColor: { type: String },
+    fontStyle: { type: String },
+    borderRadius: { type: String },
+    animationLevel: { type: String },
+    themeSettings: {
+      type: Schema.Types.Mixed,
+      default: {}
     },
     visibility: {
       type: String,
