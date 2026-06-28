@@ -6,13 +6,13 @@ import {
   updateCertification,
   deleteCertification,
 } from '../controllers/certifications.controller';
-import { protect, restrictTo } from '../middleware/auth.middleware';
+import { protect, restrictTo, optionalProtect } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { certificationSchema } from '../middleware/schemas';
 
 const router = Router();
 
-router.get('/', getCertifications);
+router.get('/', optionalProtect, getCertifications);
 router.get('/:id', getCertificationById);
 
 // Admin-only certification operations

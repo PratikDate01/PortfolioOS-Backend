@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { getSkills, createSkill, updateSkill, deleteSkill } from '../controllers/skills.controller';
-import { protect, restrictTo } from '../middleware/auth.middleware';
+import { protect, restrictTo, optionalProtect } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { skillSchema } from '../middleware/schemas';
 
 const router = Router();
 
-router.get('/', getSkills);
+router.get('/', optionalProtect, getSkills);
 
 // Admin-only operations
 router.post('/', protect, restrictTo('owner', 'admin'), validate(skillSchema), createSkill);
