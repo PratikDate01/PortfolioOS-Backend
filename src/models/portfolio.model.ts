@@ -55,7 +55,8 @@ const PortfolioSchema = new Schema<PortfolioDocument>(
     analyticsSettings: {
       enabled: { type: Boolean, default: true }
     },
-    showProfilePhoto: { type: Boolean, required: true, default: true }
+    showProfilePhoto: { type: Boolean, required: true, default: true },
+    showPortfolioViews: { type: Boolean, required: true, default: true }
   },
   { timestamps: true }
 );

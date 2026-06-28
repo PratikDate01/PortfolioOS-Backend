@@ -85,6 +85,7 @@ export interface Portfolio {
     enabled: boolean;
   };
   showProfilePhoto?: boolean;
+  showPortfolioViews?: boolean;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }
