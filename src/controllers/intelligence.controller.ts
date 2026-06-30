@@ -37,7 +37,7 @@ export const getAtsMatch = async (req: AuthenticatedRequest, res: Response): Pro
     if (customSkills && Array.isArray(customSkills)) {
       userSkills = customSkills.map(s => String(s).toLowerCase().trim());
     } else if (userId) {
-      const skillsInDb = await SkillModel.find({ userId });
+      const skillsInDb = await SkillModel.find({ ownerId: userId });
       userSkills = skillsInDb.map(s => s.name.toLowerCase().trim());
     }
 
@@ -202,7 +202,7 @@ export const getSkillGap = async (req: AuthenticatedRequest, res: Response): Pro
     // Resolve user skills
     let userSkills: string[] = [];
     if (userId) {
-      const skillsInDb = await SkillModel.find({ userId });
+      const skillsInDb = await SkillModel.find({ ownerId: userId });
       userSkills = skillsInDb.map(s => s.name.toLowerCase().trim());
     }
 
@@ -291,8 +291,8 @@ export const getReadinessScore = async (req: AuthenticatedRequest, res: Response
     const [portfolio, projects, skills, certifications, resumes] = await Promise.all([
       PortfolioModel.findOne({ ownerId: userId }),
       ProjectModel.find({ ownerId: userId, status: { $ne: 'archived' } }),
-      SkillModel.find({ userId }),
-      CertificationModel.find({ userId }),
+      SkillModel.find({ ownerId: userId }),
+      CertificationModel.find({ ownerId: userId }),
       ResumeModel.find({ userId })
     ]);
 

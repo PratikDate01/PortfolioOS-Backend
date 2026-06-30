@@ -3,6 +3,10 @@ import { SkillModel } from '../models/skill.model';
 import { UserModel } from '../models/user.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
+const escapeRegex = (str: string): string => {
+  return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+};
+
 export const getSkills = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { category, username } = req.query;
@@ -30,6 +34,7 @@ export const getSkills = async (req: AuthenticatedRequest, res: Response): Promi
     const skills = await SkillModel.find(filter).sort({ category: 1, proficiency: -1 });
     res.status(200).json({ data: skills });
   } catch (error) {
+    console.error('Error listing skills:', error);
     res.status(500).json({ error: 'Server error listing skills' });
   }
 };
@@ -46,8 +51,9 @@ export const createSkill = async (req: AuthenticatedRequest, res: Response): Pro
 
     skillData.ownerId = ownerId;
 
-    // Verify uniqueness of skill name per owner
-    const existing = await SkillModel.findOne({ ownerId, name: { $regex: new RegExp(`^${skillData.name}$`, 'i') } });
+    // Verify uniqueness of skill name per owner (escaped case-insensitive regex check)
+    const escapedName = escapeRegex(skillData.name);
+    const existing = await SkillModel.findOne({ ownerId, name: { $regex: new RegExp(`^${escapedName}$`, 'i') } });
     if (existing) {
       res.status(400).json({ error: 'A skill with this name already exists in your portfolio' });
       return;
@@ -57,6 +63,7 @@ export const createSkill = async (req: AuthenticatedRequest, res: Response): Pro
     await skill.save();
     res.status(201).json({ data: skill });
   } catch (error) {
+    console.error('Error creating skill:', error);
     res.status(500).json({ error: 'Server error creating skill' });
   }
 };
@@ -85,6 +92,7 @@ export const updateSkill = async (req: AuthenticatedRequest, res: Response): Pro
     const updated = await SkillModel.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
     res.status(200).json({ data: updated });
   } catch (error) {
+    console.error('Error updating skill:', error);
     res.status(500).json({ error: 'Server error updating skill' });
   }
 };
@@ -113,6 +121,7 @@ export const deleteSkill = async (req: AuthenticatedRequest, res: Response): Pro
     await SkillModel.findByIdAndDelete(id);
     res.status(200).json({ data: skill, message: 'Skill deleted successfully' });
   } catch (error) {
+    console.error('Error deleting skill:', error);
     res.status(500).json({ error: 'Server error deleting skill' });
   }
 };

@@ -3,6 +3,10 @@ import { fetchGitHubStats } from '../services/githubSync';
 import { UserModel } from '../models/user.model';
 import { PortfolioModel } from '../models/portfolio.model';
 
+const escapeRegex = (str: string): string => {
+  return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+};
+
 export const getGitHubStats = async (req: Request, res: Response) => {
   try {
     const { username } = req.query;
@@ -26,14 +30,15 @@ export const getGitHubStats = async (req: Request, res: Response) => {
 
       // 3. If not found, check if it matches any user/portfolio githubUsername in the DB
       if (!githubUsername) {
+        const escapedUsername = escapeRegex(parsedUsername);
         const userByGithub = await UserModel.findOne({
-          githubUsername: { $regex: new RegExp(`^${parsedUsername}$`, 'i') }
+          githubUsername: { $regex: new RegExp(`^${escapedUsername}$`, 'i') }
         });
         if (userByGithub && userByGithub.githubUsername) {
           githubUsername = userByGithub.githubUsername.trim();
         } else {
           const portfolioByGithub = await PortfolioModel.findOne({
-            githubUsername: { $regex: new RegExp(`^${parsedUsername}$`, 'i') }
+            githubUsername: { $regex: new RegExp(`^${escapedUsername}$`, 'i') }
           });
           if (portfolioByGithub && portfolioByGithub.githubUsername) {
             githubUsername = portfolioByGithub.githubUsername.trim();
